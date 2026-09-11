@@ -1,15 +1,22 @@
+# Docker Compose stack for local/containerized development:
+# frontend (Nginx) -> api (Express) -> mongodb (data store)
 services:
+  # React frontend built and served by Nginx.
   frontend:
+    # Build frontend image from the frontend workspace Dockerfile.
     build:
       context: ./frontend
       dockerfile: Dockerfile
     image: expense-dashboard-frontend:latest
     container_name: expense-dashboard-frontend
+    # Expose Nginx port 80 on a configurable host port (default 8080).
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+    # Start frontend only after API passes its health check.
     depends_on:
       api:
         condition: service_healthy
+    # Health check confirms Nginx is serving the frontend root page.
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ > /dev/null || exit 1"]
       interval: 30s
@@ -17,22 +24,28 @@ services:
       retries: 3
       start_period: 10s
 
+  # Express API service.
   api:
+    # Build API image from repository root Dockerfile.
     build:
       context: .
       dockerfile: Dockerfile
     image: expense-dashboard-api:latest
     container_name: expense-dashboard-api
+    # Runtime configuration for API behavior and MongoDB connection.
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3000}
       MONGO_DB: ${MONGO_DB:-expense_dashboard}
       MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME:-expense_user}:${MONGO_INITDB_ROOT_PASSWORD:-expense_pass}@mongodb:27017/${MONGO_DB:-expense_dashboard}?authSource=admin
+    # Expose API container port 3000 on a configurable host port.
     ports:
       - "${API_PORT:-3000}:3000"
+    # Start API only after MongoDB passes its health check.
     depends_on:
       mongodb:
         condition: service_healthy
+    # Health check validates API readiness via /health endpoint.
     healthcheck:
       test:
         [
@@ -44,18 +57,23 @@ services:
       retries: 3
       start_period: 10s
 
+  # MongoDB database service for persistent transaction storage.
   mongodb:
     image: mongo:7
     container_name: expense-dashboard-mongodb
     restart: unless-stopped
+    # Initialize MongoDB credentials and default database.
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-expense_user}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-expense_pass}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-expense_dashboard}
+    # Expose MongoDB container port on configurable host port (default 27017).
     ports:
       - "${MONGO_PORT:-27017}:27017"
+    # Persist MongoDB data across container restarts/recreates.
     volumes:
       - mongodb_data:/data/db
+    # Health check ensures MongoDB is responsive and auth is working.
     healthcheck:
       test:
         [
@@ -68,5 +86,6 @@ services:
       start_period: 20s
 
 volumes:
+  # Named volume used by MongoDB for durable local data.
   mongodb_data:
     name: expense_dashboard_mongodb_data
