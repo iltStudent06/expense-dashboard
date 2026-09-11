@@ -18,6 +18,24 @@ spec:
         - name: expense-api
           image: expense-dashboard-api:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: expense-api-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: expense-api-secrets
+                  key: MONGO_DB
+                  optional: true
+            - name: MONGO_COLLECTION
+              valueFrom:
+                secretKeyRef:
+                  name: expense-api-secrets
+                  key: MONGO_COLLECTION
+                  optional: true
           ports:
             - containerPort: 3000
           resources:
