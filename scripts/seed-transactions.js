@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 
+// Runtime configuration: target API and source seed file can be overridden via env vars.
 const apiBaseUrl = process.env.API_URL ?? "http://localhost:3000";
 const inputFile = process.env.SEED_FILE ?? "seed/transactions.json";
 const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/api/transactions`;
 
+// Loads and validates seed input from disk.
 async function loadTransactions(filePath) {
   const raw = await readFile(filePath, "utf8");
   const parsed = JSON.parse(raw);
@@ -15,6 +17,7 @@ async function loadTransactions(filePath) {
   return parsed;
 }
 
+// Sends one transaction to the API and surfaces clear errors on failure.
 async function postTransaction(transaction) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -42,6 +45,7 @@ async function postTransaction(transaction) {
   return payload;
 }
 
+// Orchestrates the full seed process and prints a completion summary.
 async function main() {
   const transactions = await loadTransactions(inputFile);
   let created = 0;
@@ -54,6 +58,7 @@ async function main() {
   console.log(`Seed complete: created ${created} transactions at ${endpoint}`);
 }
 
+// Top-level runner with process-level error handling for CLI usage.
 main().catch((error) => {
   console.error(`Seed failed: ${error.message}`);
   process.exit(1);
