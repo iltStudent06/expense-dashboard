@@ -1,0 +1,212 @@
+[
+  {
+    "type": "income",
+    "amount": 5200,
+    "category": "Salary",
+    "description": "Monthly salary",
+    "date": "2026-04-01"
+  },
+  {
+    "type": "income",
+    "amount": 350,
+    "category": "Freelance",
+    "description": "Website update project",
+    "date": "2026-04-12"
+  },
+  {
+    "type": "expense",
+    "amount": 1450,
+    "category": "Rent",
+    "description": "April rent",
+    "date": "2026-04-03"
+  },
+  {
+    "type": "expense",
+    "amount": 320,
+    "category": "Groceries",
+    "description": "Weekly groceries",
+    "date": "2026-04-10"
+  },
+  {
+    "type": "expense",
+    "amount": 90,
+    "category": "Utilities",
+    "description": "Electricity + water",
+    "date": "2026-04-16"
+  },
+  {
+    "type": "income",
+    "amount": 5200,
+    "category": "Salary",
+    "description": "Monthly salary",
+    "date": "2026-05-01"
+  },
+  {
+    "type": "income",
+    "amount": 420,
+    "category": "Freelance",
+    "description": "Design retainer",
+    "date": "2026-05-14"
+  },
+  {
+    "type": "expense",
+    "amount": 1450,
+    "category": "Rent",
+    "description": "May rent",
+    "date": "2026-05-03"
+  },
+  {
+    "type": "expense",
+    "amount": 305,
+    "category": "Groceries",
+    "description": "Weekly groceries",
+    "date": "2026-05-09"
+  },
+  {
+    "type": "expense",
+    "amount": 165,
+    "category": "Transportation",
+    "description": "Fuel + transit pass",
+    "date": "2026-05-18"
+  },
+  {
+    "type": "income",
+    "amount": 5200,
+    "category": "Salary",
+    "description": "Monthly salary",
+    "date": "2026-06-01"
+  },
+  {
+    "type": "income",
+    "amount": 180,
+    "category": "Interest",
+    "description": "Savings interest",
+    "date": "2026-06-28"
+  },
+  {
+    "type": "expense",
+    "amount": 1450,
+    "category": "Rent",
+    "description": "June rent",
+    "date": "2026-06-03"
+  },
+  {
+    "type": "expense",
+    "amount": 340,
+    "category": "Groceries",
+    "description": "Weekly groceries",
+    "date": "2026-06-11"
+  },
+  {
+    "type": "expense",
+    "amount": 210,
+    "category": "Health",
+    "description": "Clinic and pharmacy",
+    "date": "2026-06-21"
+  },
+  {
+    "type": "income",
+    "amount": 5200,
+    "category": "Salary",
+    "description": "Monthly salary",
+    "date": "2026-07-01"
+  },
+  {
+    "type": "income",
+    "amount": 510,
+    "category": "Freelance",
+    "description": "Mobile app bug fixes",
+    "date": "2026-07-19"
+  },
+  {
+    "type": "expense",
+    "amount": 1450,
+    "category": "Rent",
+    "description": "July rent",
+    "date": "2026-07-03"
+  },
+  {
+    "type": "expense",
+    "amount": 360,
+    "category": "Groceries",
+    "description": "Weekly groceries",
+    "date": "2026-07-13"
+  },
+  {
+    "type": "expense",
+    "amount": 220,
+    "category": "Entertainment",
+    "description": "Concert and streaming",
+    "date": "2026-07-25"
+  },
+  {
+    "type": "income",
+    "amount": 5200,
+    "category": "Salary",
+    "description": "Monthly salary",
+    "date": "2026-08-01"
+  },
+  {
+    "type": "income",
+    "amount": 260,
+    "category": "Bonus",
+    "description": "Performance bonus",
+    "date": "2026-08-15"
+  },
+  {
+    "type": "expense",
+    "amount": 1450,
+    "category": "Rent",
+    "description": "August rent",
+    "date": "2026-08-03"
+  },
+  {
+    "type": "expense",
+    "amount": 355,
+    "category": "Groceries",
+    "description": "Weekly groceries",
+    "date": "2026-08-12"
+  },
+  {
+    "type": "expense",
+    "amount": 140,
+    "category": "Utilities",
+    "description": "Internet + electric",
+    "date": "2026-08-22"
+  },
+  {
+    "type": "income",
+    "amount": 5200,
+    "category": "Salary",
+    "description": "Monthly salary",
+    "date": "2026-09-01"
+  },
+  {
+    "type": "income",
+    "amount": 300,
+    "category": "Freelance",
+    "description": "Consulting session",
+    "date": "2026-09-05"
+  },
+  {
+    "type": "expense",
+    "amount": 1450,
+    "category": "Rent",
+    "description": "September rent",
+    "date": "2026-09-03"
+  },
+  {
+    "type": "expense",
+    "amount": 365,
+    "category": "Groceries",
+    "description": "Weekly groceries",
+    "date": "2026-09-08"
+  },
+  {
+    "type": "expense",
+    "amount": 95,
+    "category": "Transportation",
+    "description": "Uber rides",
+    "date": "2026-09-09"
+  }
+]

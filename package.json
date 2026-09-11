@@ -1,0 +1,19 @@
+{
+  "name": "expense-dashboard-api",
+  "version": "1.0.0",
+  "description": "Expense Tracker / Budget Dashboard API",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node scripts/seed-transactions.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongodb": "^7.6.0"
+  }
+}

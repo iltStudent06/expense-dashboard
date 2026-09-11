@@ -1,0 +1,87 @@
+name: Deploy API to EKS
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
+
+jobs:
+  build-scan-push-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate required configuration
+        run: |
+          test -n "$AWS_REGION"
+          test -n "$EKS_CLUSTER_NAME"
+          test -n "$ECR_REPOSITORY"
+
+      - name: Resolve AWS account ID
+        id: aws-account
+        run: echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Compose image URI
+        id: image
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::7}"
+          IMAGE_URI="${{ steps.aws-account.outputs.account_id }}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Kubernetes namespace
+        id: namespace
+        run: |
+          NAMESPACE="${K8S_NAMESPACE:-default}"
+          echo "value=$NAMESPACE" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        run: docker build -t "${{ steps.image.outputs.image_uri }}" .
+
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.image_uri }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Push image to ECR
+        run: docker push "${{ steps.image.outputs.image_uri }}"
+
+      - name: Update kubeconfig for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Apply manifests and update image
+        run: |
+          kubectl apply -f k8s/expense-api-deployment.yaml -n "${{ steps.namespace.outputs.value }}"
+          kubectl apply -f k8s/expense-api-service.yaml -n "${{ steps.namespace.outputs.value }}"
+          kubectl set image deployment/expense-api expense-api="${{ steps.image.outputs.image_uri }}" -n "${{ steps.namespace.outputs.value }}"
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/expense-api -n "${{ steps.namespace.outputs.value }}" --timeout=180s
+          kubectl get pods -l app=expense-api -n "${{ steps.namespace.outputs.value }}"

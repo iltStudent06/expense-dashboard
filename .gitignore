@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+dist/
+coverage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
