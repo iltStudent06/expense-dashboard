@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
+// Optional API prefix, useful when frontend and backend are hosted on different origins.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
+// Formats numeric values as USD for dashboard metrics and table amounts.
 function formatCurrency(amount) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -9,12 +11,14 @@ function formatCurrency(amount) {
   }).format(amount || 0);
 }
 
+// Initializes the month filter to the current year-month (YYYY-MM).
 function getCurrentMonth() {
   const now = new Date();
   const month = `${now.getMonth() + 1}`.padStart(2, "0");
   return `${now.getFullYear()}-${month}`;
 }
 
+// Shared fetch helper that applies JSON headers and normalizes API errors.
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -41,12 +45,15 @@ async function request(path, options = {}) {
 }
 
 export default function App() {
+  // Global dashboard state: filters, API data, and request/error lifecycle.
   const [month, setMonth] = useState(getCurrentMonth());
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [trends, setTrends] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Inline editing state for a selected transaction row.
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
     type: "expense",
@@ -56,6 +63,7 @@ export default function App() {
     date: ""
   });
 
+  // Form state for creating a new transaction.
   const [form, setForm] = useState({
     type: "expense",
     amount: "",
@@ -64,6 +72,7 @@ export default function App() {
     date: new Date().toISOString().slice(0, 10)
   });
 
+  // Loads transactions, summary, and trend data for the selected month.
   async function loadDashboard(selectedMonth) {
     setLoading(true);
     setError("");
@@ -85,10 +94,12 @@ export default function App() {
     }
   }
 
+  // Refresh dashboard whenever the month filter changes.
   useEffect(() => {
     loadDashboard(month);
   }, [month]);
 
+  // Creates a new transaction and refreshes dashboard data.
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
@@ -114,6 +125,7 @@ export default function App() {
     }
   }
 
+  // Puts a table row into edit mode and pre-fills editable fields.
   function startEditing(item) {
     setEditingId(item.id);
     setEditForm({
@@ -125,6 +137,7 @@ export default function App() {
     });
   }
 
+  // Exits edit mode and clears temporary edit fields.
   function cancelEditing() {
     setEditingId(null);
     setEditForm({
@@ -136,6 +149,7 @@ export default function App() {
     });
   }
 
+  // Saves an edited transaction via API and refreshes current view.
   async function handleUpdate(itemId) {
     setError("");
 
@@ -155,6 +169,7 @@ export default function App() {
     }
   }
 
+  // Deletes a transaction via API and refreshes current view.
   async function handleDelete(itemId) {
     setError("");
 
@@ -173,8 +188,10 @@ export default function App() {
     }
   }
 
+  // Derived totals fallback while summary is loading/unavailable.
   const totals = summary?.totals ?? { income: 0, expenses: 0, balance: 0 };
 
+  // Sorts transactions newest-first for the Recent Transactions table.
   const orderedTransactions = useMemo(
     () => [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)),
     [transactions]
@@ -184,6 +201,7 @@ export default function App() {
     <main className="page">
       <h1>Expense Tracker / Budget Dashboard</h1>
 
+      {/* Transaction entry form */}
       <section className="panel">
         <h2>Log Transaction</h2>
         <form className="form" onSubmit={handleSubmit}>
@@ -243,6 +261,7 @@ export default function App() {
         </form>
       </section>
 
+      {/* Month filter controlling table and summary scope */}
       <section className="panel filters">
         <h2>Filters</h2>
         <label>
@@ -251,9 +270,11 @@ export default function App() {
         </label>
       </section>
 
+      {/* Request status messages */}
       {error ? <p className="error">{error}</p> : null}
       {loading ? <p>Loading...</p> : null}
 
+      {/* High-level totals for selected month */}
       <section className="grid">
         <article className="panel">
           <h3>Income</h3>
@@ -269,6 +290,7 @@ export default function App() {
         </article>
       </section>
 
+      {/* Transaction list with inline edit/delete actions */}
       <section className="panel">
         <h2>Recent Transactions</h2>
         <div className="table-wrap">
@@ -394,6 +416,7 @@ export default function App() {
         </div>
       </section>
 
+      {/* Multi-month trend breakdown for income/expenses/balance */}
       <section className="panel">
         <h2>Trends (Last 6 Months)</h2>
         <div className="table-wrap">

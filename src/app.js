@@ -4,17 +4,21 @@ import { MongoClient, ObjectId } from "mongodb";
 const app = express();
 app.use(express.json());
 
+// Runtime MongoDB configuration (supports overrides via environment variables).
 const mongoUri = process.env.MONGO_URI ?? "mongodb://localhost:27017/expense_dashboard";
 const mongoDbName = process.env.MONGO_DB ?? "expense_dashboard";
 const mongoCollectionName = process.env.MONGO_COLLECTION ?? "transactions";
 
+// Shared Mongo client/collection promise reused across all requests.
 const mongoClient = new MongoClient(mongoUri);
 const transactionsCollectionPromise = mongoClient
   .connect()
   .then(() => mongoClient.db(mongoDbName).collection(mongoCollectionName));
 
+// Accepted transaction types.
 const VALID_TYPES = new Set(["income", "expense"]);
 
+// Converts an ISO date string to YYYY-MM for month-based grouping/filtering.
 function toMonthKey(dateValue) {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) {
@@ -25,6 +29,7 @@ function toMonthKey(dateValue) {
   return `${date.getUTCFullYear()}-${month}`;
 }
 
+// Validates and normalizes incoming transaction payloads.
 function normalizeTransaction(payload) {
   const { type, amount, category, description = "", date } = payload;
 
@@ -57,6 +62,7 @@ function normalizeTransaction(payload) {
   };
 }
 
+// Validates and converts URL id parameter to Mongo ObjectId.
 function parseTransactionId(idValue) {
   if (!ObjectId.isValid(idValue)) {
     return { error: "transaction id is invalid" };
@@ -65,6 +71,7 @@ function parseTransactionId(idValue) {
   return { value: new ObjectId(idValue) };
 }
 
+// Maps Mongo documents to API response shape.
 function toPublicTransaction(document) {
   return {
     id: document._id.toString(),
@@ -76,10 +83,12 @@ function toPublicTransaction(document) {
   };
 }
 
+// Validates month filter format.
 function isValidMonth(value) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }
 
+// Builds inclusive start/exclusive end ISO date bounds for a month filter.
 function buildMonthRange(month) {
   if (!isValidMonth(month)) {
     return null;
@@ -95,6 +104,7 @@ function buildMonthRange(month) {
   return { start, end };
 }
 
+// Builds Mongo query object from optional API filters.
 function buildTransactionQuery({ type, category, month }) {
   const query = {};
 
@@ -125,6 +135,7 @@ function buildTransactionQuery({ type, category, month }) {
   return query;
 }
 
+// Wraps async route handlers with consistent 500 error responses.
 function withErrorHandling(handler) {
   return async (req, res) => {
     try {
@@ -136,10 +147,12 @@ function withErrorHandling(handler) {
   };
 }
 
+// Lightweight health endpoint used by Docker/Kubernetes probes.
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
+// Creates a transaction document.
 app.post(
   "/api/transactions",
   withErrorHandling(async (req, res) => {
@@ -162,6 +175,7 @@ app.post(
   })
 );
 
+// Returns transactions, optionally filtered by type/category/month.
 app.get(
   "/api/transactions",
   withErrorHandling(async (req, res) => {
@@ -175,6 +189,7 @@ app.get(
   })
 );
 
+// Updates one transaction by id.
 app.put(
   "/api/transactions/:id",
   withErrorHandling(async (req, res) => {
@@ -203,6 +218,7 @@ app.put(
   })
 );
 
+// Deletes one transaction by id.
 app.delete(
   "/api/transactions/:id",
   withErrorHandling(async (req, res) => {
@@ -222,6 +238,7 @@ app.delete(
   })
 );
 
+// Aggregates totals and category breakdown for a month or all-time.
 app.get(
   "/api/summary",
   withErrorHandling(async (req, res) => {
@@ -267,6 +284,7 @@ app.get(
   })
 );
 
+// Builds month-by-month income/expense/balance trend data.
 app.get(
   "/api/trends",
   withErrorHandling(async (req, res) => {
@@ -319,6 +337,7 @@ app.get(
   })
 );
 
+// Catch-all for unknown routes.
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
 });
