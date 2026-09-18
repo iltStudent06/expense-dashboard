@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 // Optional API prefix, useful when frontend and backend are hosted on different origins.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -44,7 +45,80 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export default function App() {
+function AppShell() {
+  return (
+    <>
+      <header className="topbar">
+        <div className="page topbar-inner">
+          <Link to="/" className="brand-link" aria-label="Expense Tracker dashboard">
+            <span className="brand-mark">$</span>
+            <span>Expense Tracker</span>
+          </Link>
+
+          <nav className="topnav" aria-label="Primary navigation">
+            <Link to="/">Dashboard</Link>
+            <Link to="/login">Login</Link>
+            <Link to="/register">Register</Link>
+          </nav>
+        </div>
+      </header>
+
+      <Outlet />
+    </>
+  );
+}
+
+function LoginPage() {
+  return (
+    <main className="page">
+      <section className="panel auth-panel">
+        <div>
+          <p className="eyebrow">Authentication</p>
+          <h1>Login</h1>
+          <p>
+            Authentication is the next step. This route is now ready for the future sign-in form
+            and JWT flow.
+          </p>
+        </div>
+        <div className="auth-actions">
+          <Link to="/" className="button-secondary">
+            Back to dashboard
+          </Link>
+          <Link to="/register" className="button-primary">
+            Go to register
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function RegisterPage() {
+  return (
+    <main className="page">
+      <section className="panel auth-panel">
+        <div>
+          <p className="eyebrow">Authentication</p>
+          <h1>Register</h1>
+          <p>
+            Registration will live here once authentication is added. The route is already wired
+            up under the /app basename.
+          </p>
+        </div>
+        <div className="auth-actions">
+          <Link to="/" className="button-secondary">
+            Back to dashboard
+          </Link>
+          <Link to="/login" className="button-primary">
+            Go to login
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function DashboardPage() {
   // Global dashboard state: filters, API data, and request/error lifecycle.
   const [month, setMonth] = useState(getCurrentMonth());
   const [transactions, setTransactions] = useState([]);
@@ -199,7 +273,13 @@ export default function App() {
 
   return (
     <main className="page">
-      <h1>Expense Tracker / Budget Dashboard</h1>
+      <section className="panel">
+        <p className="eyebrow">Dashboard</p>
+        <h1>Expense Tracker / Budget Dashboard</h1>
+        <p className="section-copy">
+          Track transactions, review monthly totals, and inspect trend data from the API.
+        </p>
+      </section>
 
       {/* Transaction entry form */}
       <section className="panel">
@@ -448,5 +528,18 @@ export default function App() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
