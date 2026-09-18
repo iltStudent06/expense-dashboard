@@ -1,8 +1,57 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 
 // Optional API prefix, useful when frontend and backend are hosted on different origins.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const AUTH_STORAGE_KEY = "expense-dashboard-auth";
+
+const AuthContext = createContext(null);
+
+function loadAuthSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAuthSession(session) {
+  if (session) {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  } else {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+}
+
+function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+
+  return context;
+}
+
+function AuthProvider({ children }) {
+  const [session, setSession] = useState(loadAuthSession);
+
+  function signIn(nextSession) {
+    setSession(nextSession);
+    saveAuthSession(nextSession);
+  }
+
+  function signOut() {
+    setSession(null);
+    saveAuthSession(null);
+  }
+
+  return (
+    <AuthContext.Provider value={{ session, signIn, signOut, isAuthenticated: Boolean(session?.token) }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
 
 // Formats numeric values as USD for dashboard metrics and table amounts.
 function formatCurrency(amount) {
@@ -21,9 +70,11 @@ function getCurrentMonth() {
 
 // Shared fetch helper that applies JSON headers and normalizes API errors.
 async function request(path, options = {}) {
+  const session = loadAuthSession();
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
       ...(options.headers || {})
     },
     ...options
@@ -46,6 +97,8 @@ async function request(path, options = {}) {
 }
 
 function AppShell() {
+  const { isAuthenticated, signOut } = useAuth();
+
   return (
     <>
       <header className="topbar">
@@ -59,6 +112,11 @@ function AppShell() {
             <Link to="/">Dashboard</Link>
             <Link to="/login">Login</Link>
             <Link to="/register">Register</Link>
+            {isAuthenticated ? (
+              <button type="button" className="topnav-button" onClick={signOut}>
+                Logout
+              </button>
+            ) : null}
           </nav>
         </div>
       </header>
@@ -69,53 +127,182 @@ function AppShell() {
 }
 
 function LoginPage() {
+  const navigate = useNavigate();
+  const { signIn } = useAuth();
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await request("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(form)
+      });
+
+      signIn(response);
+      navigate("/");
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="page">
       <section className="panel auth-panel">
-        <div>
+        <div className="auth-copy">
           <p className="eyebrow">Authentication</p>
           <h1>Login</h1>
-          <p>
-            Authentication is the next step. This route is now ready for the future sign-in form
-            and JWT flow.
-          </p>
+          <p>Sign in to manage transactions and use the protected write endpoints.</p>
         </div>
-        <div className="auth-actions">
-          <Link to="/" className="button-secondary">
-            Back to dashboard
-          </Link>
-          <Link to="/register" className="button-primary">
-            Go to register
-          </Link>
-        </div>
+      </section>
+
+      <section className="panel auth-panel">
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={form.email}
+              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={form.password}
+              onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+            />
+          </label>
+
+          {error ? <p className="error">{error}</p> : null}
+
+          <div className="auth-actions">
+            <Link to="/register" className="button-secondary">
+              Need an account?
+            </Link>
+            <button type="submit" className="button-primary" disabled={loading}>
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </div>
+        </form>
       </section>
     </main>
   );
 }
 
 function RegisterPage() {
+  const navigate = useNavigate();
+  const { signIn } = useAuth();
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await request("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify(form)
+      });
+
+      signIn(response);
+      navigate("/");
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="page">
       <section className="panel auth-panel">
-        <div>
+        <div className="auth-copy">
           <p className="eyebrow">Authentication</p>
           <h1>Register</h1>
-          <p>
-            Registration will live here once authentication is added. The route is already wired
-            up under the /app basename.
-          </p>
+          <p>Create an account to access protected transaction actions.</p>
         </div>
-        <div className="auth-actions">
-          <Link to="/" className="button-secondary">
-            Back to dashboard
-          </Link>
-          <Link to="/login" className="button-primary">
-            Go to login
-          </Link>
-        </div>
+      </section>
+
+      <section className="panel auth-panel">
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            Name
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+            />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={form.email}
+              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={form.password}
+              onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+            />
+          </label>
+          <label>
+            Role
+            <select
+              value={form.role}
+              onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+
+          {error ? <p className="error">{error}</p> : null}
+
+          <div className="auth-actions">
+            <Link to="/login" className="button-secondary">
+              Have an account?
+            </Link>
+            <button type="submit" className="button-primary" disabled={loading}>
+              {loading ? "Creating..." : "Create account"}
+            </button>
+          </div>
+        </form>
       </section>
     </main>
   );
+}
+
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 }
 
 function DashboardPage() {
@@ -533,13 +720,22 @@ function DashboardPage() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   );
 }

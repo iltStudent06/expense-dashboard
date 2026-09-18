@@ -1,5 +1,7 @@
 import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 const app = express();
 app.use(express.json());
@@ -8,12 +10,14 @@ app.use(express.json());
 const mongoUri = process.env.MONGO_URI ?? "mongodb://localhost:27017/expense_dashboard";
 const mongoDbName = process.env.MONGO_DB ?? "expense_dashboard";
 const mongoCollectionName = process.env.MONGO_COLLECTION ?? "transactions";
+const usersCollectionName = process.env.MONGO_USERS_COLLECTION ?? "users";
+const jwtSecret = process.env.JWT_SECRET ?? "dev-secret-change-in-production";
 
 // Shared Mongo client/collection promise reused across all requests.
 const mongoClient = new MongoClient(mongoUri);
-const transactionsCollectionPromise = mongoClient
-  .connect()
-  .then(() => mongoClient.db(mongoDbName).collection(mongoCollectionName));
+const dbPromise = mongoClient.connect().then(() => mongoClient.db(mongoDbName));
+const transactionsCollectionPromise = dbPromise.then((db) => db.collection(mongoCollectionName));
+const usersCollectionPromise = dbPromise.then((db) => db.collection(usersCollectionName));
 
 // Accepted transaction types.
 const VALID_TYPES = new Set(["income", "expense"]);
@@ -147,6 +151,131 @@ function withErrorHandling(handler) {
   };
 }
 
+// Creates a signed JWT for a user.
+function createAuthToken(user) {
+  return jwt.sign({ userId: user._id.toString(), role: user.role }, jwtSecret, { expiresIn: "7d" });
+}
+
+// Maps Mongo user documents to API response shape.
+function toPublicUser(document) {
+  return {
+    id: document._id.toString(),
+    name: document.name,
+    email: document.email,
+    role: document.role
+  };
+}
+
+// Validates registration and login payloads.
+function normalizeAuthPayload(payload) {
+  const { name, email, password, role = "user" } = payload;
+
+  if (typeof email !== "string" || !email.includes("@")) {
+    return { error: "email must be valid" };
+  }
+
+  if (typeof password !== "string" || password.trim().length < 6) {
+    return { error: "password must be at least 6 characters" };
+  }
+
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return { error: "name is required" };
+  }
+
+  if (role !== "user" && role !== "admin") {
+    return { error: "role must be either 'user' or 'admin'" };
+  }
+
+  return {
+    value: {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      role
+    }
+  };
+}
+
+// Verifies bearer token and rejects unauthenticated writes.
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization ?? "";
+  const [scheme, token] = header.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return res.status(401).json({ error: "authorization token required" });
+  }
+
+  try {
+    req.user = jwt.verify(token, jwtSecret);
+    return next();
+  } catch {
+    return res.status(401).json({ error: "invalid or expired token" });
+  }
+}
+
+// Registration endpoint.
+app.post(
+  "/api/auth/register",
+  withErrorHandling(async (req, res) => {
+    const { value, error } = normalizeAuthPayload(req.body ?? {});
+
+    if (error) {
+      return res.status(400).json({ error });
+    }
+
+    const usersCollection = await usersCollectionPromise;
+    const existingUser = await usersCollection.findOne({ email: value.email });
+    if (existingUser) {
+      return res.status(409).json({ error: "email already exists" });
+    }
+
+    const passwordHash = await bcrypt.hash(value.password, 10);
+    const insertResult = await usersCollection.insertOne({
+      name: value.name,
+      email: value.email,
+      passwordHash,
+      role: value.role,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const user = {
+      _id: insertResult.insertedId,
+      name: value.name,
+      email: value.email,
+      role: value.role
+    };
+
+    return res.status(201).json({ token: createAuthToken(user), user: toPublicUser(user) });
+  })
+);
+
+// Login endpoint.
+app.post(
+  "/api/auth/login",
+  withErrorHandling(async (req, res) => {
+    const { email, password } = req.body ?? {};
+
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+
+    const usersCollection = await usersCollectionPromise;
+    const user = await usersCollection.findOne({ email: email.trim().toLowerCase() });
+
+    if (!user) {
+      return res.status(401).json({ error: "invalid credentials" });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "invalid credentials" });
+    }
+
+    return res.status(200).json({ token: createAuthToken(user), user: toPublicUser(user) });
+  })
+);
+
 // Lightweight health endpoint used by Docker/Kubernetes probes.
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
@@ -155,6 +284,7 @@ app.get("/health", (_req, res) => {
 // Creates a transaction document.
 app.post(
   "/api/transactions",
+  requireAuth,
   withErrorHandling(async (req, res) => {
   const { value, error } = normalizeTransaction(req.body ?? {});
 
@@ -192,6 +322,7 @@ app.get(
 // Updates one transaction by id.
 app.put(
   "/api/transactions/:id",
+  requireAuth,
   withErrorHandling(async (req, res) => {
     const { value: transactionId, error: idError } = parseTransactionId(req.params.id);
     if (idError) {
@@ -221,6 +352,7 @@ app.put(
 // Deletes one transaction by id.
 app.delete(
   "/api/transactions/:id",
+  requireAuth,
   withErrorHandling(async (req, res) => {
     const { value: transactionId, error: idError } = parseTransactionId(req.params.id);
     if (idError) {
