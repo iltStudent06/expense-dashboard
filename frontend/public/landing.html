@@ -6,25 +6,18 @@
     <title>Expense Tracker - Smart Budget Management</title>
     <style>
         :root {
-            --color-primary: #2563eb;
-            --color-primary-dark: #1e40af;
-            --color-secondary: #10b981;
-            --color-bg: #f9fafb;
-            --color-bg-dark: #ffffff;
-            --color-text: #111827;
-            --color-text-light: #6b7280;
-            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            --spacing-xs: 0.5rem;
-            --spacing-sm: 1rem;
-            --spacing-md: 1.5rem;
-            --spacing-lg: 2rem;
-            --spacing-xl: 3rem;
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            color: #111827;
+            background: #f3f4f6;
+            --primary: #111827;
+            --accent: #2563eb;
+            --accent-dark: #1e40af;
+            --panel: #ffffff;
+            --panel-border: #e5e7eb;
+            --muted: #6b7280;
         }
 
         * {
-            margin: 0;
-            padding: 0;
             box-sizing: border-box;
         }
 
@@ -33,299 +26,350 @@
         }
 
         body {
-            font-family: var(--font-sans);
+            margin: 0;
             line-height: 1.6;
-            color: var(--color-text);
-            background-color: var(--color-bg);
+            color: #111827;
+            background: #f3f4f6;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
         }
 
         nav {
             position: sticky;
             top: 0;
             z-index: 100;
-            background-color: var(--color-bg-dark);
-            box-shadow: var(--shadow-md);
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--panel-border);
         }
 
-        nav .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: var(--spacing-md);
+        nav .page {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 16px;
+            padding-top: 16px;
+            padding-bottom: 16px;
         }
 
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--color-primary);
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             text-decoration: none;
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+
+        .brand-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: #111827;
+            color: #fff;
+            font-size: 1rem;
         }
 
         nav ul {
             list-style: none;
             display: flex;
-            gap: var(--spacing-lg);
             align-items: center;
+            gap: 18px;
+            margin: 0;
+            padding: 0;
+            flex-wrap: wrap;
         }
 
         nav a {
-            color: var(--color-text);
             text-decoration: none;
             font-weight: 500;
-            transition: color 0.3s ease;
+            color: #374151;
         }
 
         nav a:hover {
-            color: var(--color-primary);
+            color: #111827;
         }
 
-        .cta-button {
-            background-color: var(--color-primary);
-            color: white;
-            padding: var(--spacing-xs) var(--spacing-md);
-            border-radius: 0.5rem;
+        .cta-button,
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 0;
             text-decoration: none;
+            font: inherit;
             font-weight: 600;
-            transition: all 0.3s ease;
-            display: inline-block;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
 
-        .cta-button:hover {
-            background-color: var(--color-primary-dark);
-            transform: translateY(-2px);
+        .cta-button,
+        .btn-primary {
+            background: #111827;
+            color: #fff;
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 var(--spacing-md);
+        .cta-button:hover,
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(17, 24, 39, 0.14);
+        }
+
+        .hero,
+        .section-card,
+        .feature-card {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 18px;
         }
 
         .hero {
-            background: linear-gradient(135deg, var(--color-primary) 0%, #1e3a8a 100%);
-            color: white;
-            padding: var(--spacing-xl) var(--spacing-md);
-            text-align: center;
-            min-height: 500px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+            margin-top: 24px;
+            padding: 28px;
+            display: grid;
+            gap: 20px;
+            grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
             align-items: center;
         }
 
         .hero h1 {
-            font-size: 3.5rem;
-            margin-bottom: var(--spacing-md);
-            line-height: 1.2;
+            font-size: clamp(2rem, 4vw, 3.25rem);
+            line-height: 1.1;
+            margin: 0 0 12px;
         }
 
         .hero p {
-            font-size: 1.25rem;
-            margin-bottom: var(--spacing-lg);
-            opacity: 0.95;
-            max-width: 600px;
+            margin: 0;
+            color: var(--muted);
+            font-size: 1.05rem;
+            max-width: 58ch;
         }
 
-        .hero-buttons {
+        .hero-actions {
             display: flex;
-            gap: var(--spacing-md);
-            justify-content: center;
+            gap: 12px;
             flex-wrap: wrap;
+            margin-top: 18px;
         }
 
-        .btn-primary {
-            background-color: white;
-            color: var(--color-primary);
-            padding: var(--spacing-sm) var(--spacing-lg);
-            border-radius: 0.5rem;
-            text-decoration: none;
+        .hero-preview {
+            background: #f9fafb;
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .hero-preview .panel {
+            margin-bottom: 0;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            color: var(--accent);
             font-weight: 700;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-            border: none;
-            cursor: pointer;
-            display: inline-block;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        .btn-primary:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        .section {
+            margin-top: 16px;
         }
 
-        .features {
-            padding: var(--spacing-xl) var(--spacing-md);
-            background-color: var(--color-bg-dark);
+        .section-card {
+            margin-top: 16px;
         }
 
         .section-title {
-            text-align: center;
-            font-size: 2.5rem;
-            margin-bottom: var(--spacing-xl);
-            color: var(--color-text);
+            margin: 0 0 8px;
+            font-size: 1.5rem;
+        }
+
+        .section-copy {
+            margin: 0 0 16px;
+            color: var(--muted);
         }
 
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: var(--spacing-lg);
-            margin-bottom: var(--spacing-xl);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
         }
 
         .feature-card {
-            background-color: var(--color-bg);
-            padding: var(--spacing-lg);
-            border-radius: 0.75rem;
-            box-shadow: var(--shadow-md);
-            transition: all 0.3s ease;
-            border-top: 4px solid var(--color-primary);
-        }
-
-        .feature-card:hover {
-            transform: translateY(-8px);
+            box-shadow: none;
         }
 
         .feature-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: var(--spacing-sm);
-            color: var(--color-primary);
+            margin: 0 0 8px;
+            font-size: 1.05rem;
         }
 
         .feature-card p {
-            color: var(--color-text-light);
-            line-height: 1.8;
+            margin: 0;
+            color: var(--muted);
         }
 
         .badges {
             display: flex;
             flex-wrap: wrap;
-            gap: var(--spacing-md);
-            justify-content: center;
-            margin: var(--spacing-lg) 0;
+            gap: 10px;
         }
 
         .badge {
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            color: white;
-            padding: var(--spacing-xs) var(--spacing-sm);
-            border-radius: 2rem;
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #1e3a8a;
+            border: 1px solid #c7d2fe;
             font-size: 0.9rem;
             font-weight: 600;
-            box-shadow: var(--shadow-md);
         }
 
-        footer {
-            background-color: var(--color-text);
-            color: white;
-            padding: var(--spacing-xl) var(--spacing-md);
+        .footer {
+            margin-top: 20px;
             text-align: center;
+            color: var(--muted);
+            font-size: 0.95rem;
         }
 
-        footer p {
-            opacity: 0.8;
-        }
-
-        @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 2.5rem;
+        @media (max-width: 900px) {
+            .hero,
+            .features-grid {
+                grid-template-columns: 1fr;
             }
+        }
 
-            nav .container {
+        @media (max-width: 700px) {
+            nav .page {
                 flex-direction: column;
-                gap: var(--spacing-md);
+                align-items: flex-start;
             }
 
             nav ul {
-                flex-direction: column;
-                gap: var(--spacing-sm);
                 width: 100%;
+                gap: 10px;
             }
 
-            .hero-buttons {
+            .page {
+                padding: 16px;
+            }
+
+            .hero {
+                padding: 20px;
+            }
+
+            .hero-actions {
                 flex-direction: column;
                 align-items: stretch;
-            }
-
-            .features-grid {
-                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
     <nav>
-        <div class="container">
-            <a href="/" class="logo">💰 Expense Tracker</a>
+        <div class="page">
+            <a href="/" class="brand">
+                <span class="brand-badge">$</span>
+                <span>Expense Tracker</span>
+            </a>
             <ul>
                 <li><a href="#features">Features</a></li>
-                <li><a href="#tech">Tech</a></li>
+                <li><a href="#tech">Tech Stack</a></li>
                 <li><a href="/app/" class="cta-button">Launch App</a></li>
             </ul>
         </div>
     </nav>
 
-    <main>
+    <main class="page">
         <section class="hero">
-            <div class="container">
+            <div>
+                <div class="eyebrow">Capstone Project</div>
                 <h1>Smart Expense Management</h1>
                 <p>Track your income and expenses, analyze spending patterns, and take control of your budget.</p>
-                <div class="hero-buttons">
+                <div class="hero-actions">
                     <a href="/app/" class="btn-primary">Get Started</a>
+                    <a href="#features" class="btn-primary" style="background:#fff;color:#111827;border:1px solid #d1d5db;">View Features</a>
+                </div>
+            </div>
+            <div class="hero-preview panel">
+                <h2 style="margin-top:0;">What you can do</h2>
+                <p style="margin:0;color:var(--muted);">A quick overview of the dashboard experience, designed to feel consistent with the rest of the app.</p>
+                <div class="badges" style="margin-top:16px;">
+                    <span class="badge">Income & Expenses</span>
+                    <span class="badge">Monthly Trends</span>
+                    <span class="badge">Transaction Editing</span>
                 </div>
             </div>
         </section>
 
-        <section id="features" class="features">
-            <div class="container">
-                <h2 class="section-title">Powerful Features</h2>
-                <div class="features-grid">
-                    <article class="feature-card">
-                        <h3>📊 Dashboard</h3>
-                        <p>Real-time overview of income, expenses, and balance with intuitive metrics.</p>
-                    </article>
-                    <article class="feature-card">
-                        <h3>💾 Easy Entry</h3>
-                        <p>Log transactions quickly with categorization and notes for detailed tracking.</p>
-                    </article>
-                    <article class="feature-card">
-                        <h3>📈 Trends</h3>
-                        <p>Monitor spending patterns over 6 months to make informed decisions.</p>
-                    </article>
-                    <article class="feature-card">
-                        <h3>🔍 Filters</h3>
-                        <p>Filter by type, category, or date range to find exactly what you need.</p>
-                    </article>
-                    <article class="feature-card">
-                        <h3>✏️ Full Control</h3>
-                        <p>Edit and delete transactions anytime with inline editing.</p>
-                    </article>
-                    <article class="feature-card">
-                        <h3>☁️ Cloud Ready</h3>
-                        <p>Built on modern cloud-native architecture for reliability.</p>
-                    </article>
-                </div>
+        <section id="features" class="section section-card">
+            <h2 class="section-title">Powerful Features</h2>
+            <p class="section-copy">A clean dashboard experience with the same neutral visual system used in the app.</p>
+            <div class="features-grid">
+                <article class="feature-card">
+                    <h3>📊 Dashboard</h3>
+                    <p>Real-time overview of income, expenses, and balance with simple cards and tables.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>💾 Easy Entry</h3>
+                    <p>Log transactions quickly with categorization and notes for detailed tracking.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>📈 Trends</h3>
+                    <p>Monitor spending patterns over 6 months to make informed decisions.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>🔍 Filters</h3>
+                    <p>Filter by type, category, or date range to find exactly what you need.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>✏️ Full Control</h3>
+                    <p>Edit and delete transactions anytime with inline editing.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>☁️ Cloud Ready</h3>
+                    <p>Built on modern cloud-native architecture for reliability.</p>
+                </article>
             </div>
         </section>
 
-        <section id="tech" class="features">
-            <div class="container">
-                <h2 class="section-title">Built With Modern Tech</h2>
-                <div class="badges">
-                    <span class="badge">React 18</span>
-                    <span class="badge">Node.js</span>
-                    <span class="badge">Express</span>
-                    <span class="badge">MongoDB</span>
-                    <span class="badge">Docker</span>
-                    <span class="badge">Kubernetes</span>
-                    <span class="badge">AWS EKS</span>
-                </div>
+        <section id="tech" class="section section-card">
+            <h2 class="section-title">Built With Modern Tech</h2>
+            <p class="section-copy">The same stack powers the API, UI, and deployment workflow.</p>
+            <div class="badges">
+                <span class="badge">React 18</span>
+                <span class="badge">Node.js</span>
+                <span class="badge">Express</span>
+                <span class="badge">MongoDB</span>
+                <span class="badge">Docker</span>
+                <span class="badge">Kubernetes</span>
+                <span class="badge">AWS EKS</span>
             </div>
         </section>
     </main>
 
-    <footer>
-        <div class="container">
+    <footer class="footer">
+        <div class="page">
             <p>&copy; 2026 Expense Tracker. Full-stack capstone project.</p>
         </div>
     </footer>
