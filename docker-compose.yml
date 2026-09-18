@@ -67,9 +67,9 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-expense_user}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-expense_pass}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-expense_dashboard}
-    # Expose MongoDB container port on configurable host port (default 27017).
+    # Expose MongoDB container port on configurable host port (default 27018 to avoid conflicts).
     ports:
-      - "${MONGO_PORT:-27017}:27017"
+      - "${MONGO_PORT:-27018}:27017"
     # Persist MongoDB data across container restarts/recreates.
     volumes:
       - mongodb_data:/data/db
