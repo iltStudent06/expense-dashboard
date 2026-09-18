@@ -11,6 +11,7 @@ const mongoUri = process.env.MONGO_URI ?? "mongodb://localhost:27017/expense_das
 const mongoDbName = process.env.MONGO_DB ?? "expense_dashboard";
 const mongoCollectionName = process.env.MONGO_COLLECTION ?? "transactions";
 const usersCollectionName = process.env.MONGO_USERS_COLLECTION ?? "users";
+const categoriesCollectionName = process.env.MONGO_CATEGORIES_COLLECTION ?? "categories";
 const jwtSecret = process.env.JWT_SECRET ?? "dev-secret-change-in-production";
 
 // Shared Mongo client/collection promise reused across all requests.
@@ -18,6 +19,7 @@ const mongoClient = new MongoClient(mongoUri);
 const dbPromise = mongoClient.connect().then(() => mongoClient.db(mongoDbName));
 const transactionsCollectionPromise = dbPromise.then((db) => db.collection(mongoCollectionName));
 const usersCollectionPromise = dbPromise.then((db) => db.collection(usersCollectionName));
+const categoriesCollectionPromise = dbPromise.then((db) => db.collection(categoriesCollectionName));
 
 // Accepted transaction types.
 const VALID_TYPES = new Set(["income", "expense"]);
@@ -35,7 +37,7 @@ function toMonthKey(dateValue) {
 
 // Validates and normalizes incoming transaction payloads.
 function normalizeTransaction(payload) {
-  const { type, amount, category, description = "", date } = payload;
+  const { type, amount, category, categoryId, description = "", date } = payload;
 
   if (!VALID_TYPES.has(type)) {
     return { error: "type must be either 'income' or 'expense'" };
@@ -50,6 +52,10 @@ function normalizeTransaction(payload) {
     return { error: "category is required" };
   }
 
+  if (typeof categoryId === "string" && categoryId.trim().length > 0 && !ObjectId.isValid(categoryId)) {
+    return { error: "categoryId is invalid" };
+  }
+
   const txDate = date ? new Date(date) : new Date();
   if (Number.isNaN(txDate.getTime())) {
     return { error: "date must be a valid date string" };
@@ -60,8 +66,30 @@ function normalizeTransaction(payload) {
       type,
       amount: Number(numericAmount.toFixed(2)),
       category: category.trim(),
+      ...(typeof categoryId === "string" && categoryId.trim().length > 0 ? { categoryId: categoryId.trim() } : {}),
       description: typeof description === "string" ? description.trim() : "",
       date: txDate.toISOString()
+    }
+  };
+}
+
+// Validates and normalizes category payloads.
+function normalizeCategoryPayload(payload) {
+  const { name, color = "#2563eb", description = "" } = payload;
+
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return { error: "name is required" };
+  }
+
+  if (typeof color !== "string" || color.trim().length === 0) {
+    return { error: "color is required" };
+  }
+
+  return {
+    value: {
+      name: name.trim(),
+      color: color.trim(),
+      description: typeof description === "string" ? description.trim() : ""
     }
   };
 }
@@ -75,6 +103,15 @@ function parseTransactionId(idValue) {
   return { value: new ObjectId(idValue) };
 }
 
+// Validates and converts URL category ids to Mongo ObjectId.
+function parseCategoryId(idValue) {
+  if (!ObjectId.isValid(idValue)) {
+    return { error: "category id is invalid" };
+  }
+
+  return { value: new ObjectId(idValue) };
+}
+
 // Maps Mongo documents to API response shape.
 function toPublicTransaction(document) {
   return {
@@ -82,8 +119,22 @@ function toPublicTransaction(document) {
     type: document.type,
     amount: document.amount,
     category: document.category,
+    categoryId: document.categoryId ? document.categoryId.toString() : null,
     description: document.description,
     date: document.date
+  };
+}
+
+// Maps Mongo category documents to API response shape.
+function toPublicCategory(document) {
+  return {
+    id: document._id.toString(),
+    name: document.name,
+    color: document.color,
+    description: document.description ?? "",
+    ownerUserId: document.ownerUserId ? document.ownerUserId.toString() : null,
+    createdAt: document.createdAt,
+    updatedAt: document.updatedAt
   };
 }
 
@@ -134,6 +185,21 @@ function buildTransactionQuery({ type, category, month }) {
         $lt: monthRange.end
       };
     }
+  }
+
+  return query;
+}
+
+// Builds a Mongo query for categories.
+function buildCategoryQuery({ name, ownerUserId }) {
+  const query = {};
+
+  if (name) {
+    query.name = { $regex: `^${String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+  }
+
+  if (ownerUserId) {
+    query.ownerUserId = ownerUserId;
   }
 
   return query;
@@ -212,6 +278,149 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: "invalid or expired token" });
   }
 }
+
+// Returns the current authenticated user id.
+function getAuthUserId(req) {
+  return req.user?.userId ?? null;
+}
+
+// Returns the current authenticated user role.
+function getAuthUserRole(req) {
+  return req.user?.role ?? null;
+}
+
+// Populates transaction category details if a categoryId exists.
+async function populateTransactionCategory(document) {
+  if (!document?.categoryId) {
+    return toPublicTransaction(document);
+  }
+
+  const categoriesCollection = await categoriesCollectionPromise;
+  const categoryId = typeof document.categoryId === "string" && ObjectId.isValid(document.categoryId)
+    ? new ObjectId(document.categoryId)
+    : document.categoryId;
+  const category = await categoriesCollection.findOne({ _id: categoryId });
+
+  return {
+    ...toPublicTransaction(document),
+    categoryDetails: category ? toPublicCategory(category) : null
+  };
+}
+
+// Category endpoints.
+app.post(
+  "/api/categories",
+  requireAuth,
+  withErrorHandling(async (req, res) => {
+    const { value, error } = normalizeCategoryPayload(req.body ?? {});
+
+    if (error) {
+      return res.status(400).json({ error });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const existingCategory = await categoriesCollection.findOne({
+      name: value.name,
+      ownerUserId: getAuthUserId(req)
+    });
+
+    if (existingCategory) {
+      return res.status(409).json({ error: "category already exists" });
+    }
+
+    const insertResult = await categoriesCollection.insertOne({
+      ...value,
+      ownerUserId: getAuthUserId(req),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const created = await categoriesCollection.findOne({ _id: insertResult.insertedId });
+    return res.status(201).json(toPublicCategory(created));
+  })
+);
+
+app.get(
+  "/api/categories",
+  withErrorHandling(async (req, res) => {
+    const { name } = req.query;
+    const categoriesCollection = await categoriesCollectionPromise;
+    const documents = await categoriesCollection
+      .find(buildCategoryQuery({ name, ownerUserId: getAuthUserId(req) }))
+      .toArray();
+
+    res.status(200).json(documents.map(toPublicCategory));
+  })
+);
+
+app.get(
+  "/api/categories/:id",
+  withErrorHandling(async (req, res) => {
+    const { value: categoryId, error: idError } = parseCategoryId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const document = await categoriesCollection.findOne({ _id: categoryId });
+    if (!document) {
+      return res.status(404).json({ error: "category not found" });
+    }
+
+    return res.status(200).json(toPublicCategory(document));
+  })
+);
+
+app.put(
+  "/api/categories/:id",
+  requireAuth,
+  withErrorHandling(async (req, res) => {
+    const { value: categoryId, error: idError } = parseCategoryId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const { value, error } = normalizeCategoryPayload(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ error });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const updated = await categoriesCollection.findOneAndUpdate(
+      { _id: categoryId },
+      { $set: { ...value, updatedAt: new Date().toISOString() } },
+      { returnDocument: "after" }
+    );
+
+    const updatedDocument = updated?.value ?? updated;
+
+    if (!updatedDocument) {
+      return res.status(404).json({ error: "category not found" });
+    }
+
+    return res.status(200).json(toPublicCategory(updatedDocument));
+  })
+);
+
+app.delete(
+  "/api/categories/:id",
+  requireAuth,
+  withErrorHandling(async (req, res) => {
+    const { value: categoryId, error: idError } = parseCategoryId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const removed = await categoriesCollection.findOneAndDelete({ _id: categoryId });
+
+    if (!removed) {
+      return res.status(404).json({ error: "category not found" });
+    }
+
+    return res.status(200).json(toPublicCategory(removed));
+  })
+);
 
 // Registration endpoint.
 app.post(
@@ -299,6 +508,7 @@ app.post(
       type: value.type,
       amount: value.amount,
       category: value.category,
+      categoryId: value.categoryId ?? null,
       description: value.description,
       date: value.date
     });
@@ -316,6 +526,25 @@ app.get(
     const documents = await collection.find(query).toArray();
 
     res.status(200).json(documents.map(toPublicTransaction));
+  })
+);
+
+app.get(
+  "/api/transactions/:id",
+  withErrorHandling(async (req, res) => {
+    const { value: transactionId, error: idError } = parseTransactionId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const collection = await transactionsCollectionPromise;
+    const document = await collection.findOne({ _id: transactionId });
+
+    if (!document) {
+      return res.status(404).json({ error: "transaction not found" });
+    }
+
+    return res.status(200).json(await populateTransactionCategory(document));
   })
 );
 
@@ -341,11 +570,13 @@ app.put(
       { returnDocument: "after" }
     );
 
-    if (!updated) {
+    const updatedDocument = updated?.value ?? updated;
+
+    if (!updatedDocument) {
       return res.status(404).json({ error: "transaction not found" });
     }
 
-    return res.status(200).json(toPublicTransaction(updated));
+    return res.status(200).json(toPublicTransaction(updatedDocument));
   })
 );
 
@@ -466,6 +697,34 @@ app.get(
   });
 
     res.status(200).json({ months, trends });
+  })
+);
+
+// Dashboard aggregates for the overview page.
+app.get(
+  "/api/dashboard",
+  withErrorHandling(async (_req, res) => {
+    const [transactionsCollection, usersCollection, categoriesCollection] = await Promise.all([
+      transactionsCollectionPromise,
+      usersCollectionPromise,
+      categoriesCollectionPromise
+    ]);
+
+    const [transactionCount, userCount, categoryCount, recentDocuments] = await Promise.all([
+      transactionsCollection.countDocuments(),
+      usersCollection.countDocuments(),
+      categoriesCollection.countDocuments(),
+      transactionsCollection.find({}).sort({ date: -1 }).limit(5).toArray()
+    ]);
+
+    res.status(200).json({
+      totals: {
+        transactions: transactionCount,
+        users: userCount,
+        categories: categoryCount
+      },
+      recentTransactions: recentDocuments.map(toPublicTransaction)
+    });
   })
 );
 
