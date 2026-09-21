@@ -24,7 +24,7 @@ function createJsonResponse<T>(body: T, ok = true, status = 200) {
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    global.fetch = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
   });
 
   test("redirects unauthenticated users from dashboard to login", async () => {
@@ -43,8 +43,8 @@ describe("App", () => {
       })
     );
 
-    const fetchMock = vi.mocked(global.fetch);
-    fetchMock.mockImplementation((path, options = {}) => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockImplementation((path: string | URL | Request, options: RequestInit = {}) => {
       if (typeof path === "string" && path.startsWith("/api/transactions?month=")) {
         return Promise.resolve(
           createJsonResponse([
@@ -87,7 +87,8 @@ describe("App", () => {
       }
 
       if (path === "/api/categories") {
-        expect((options.headers as Headers).get("Authorization")).toBe("Bearer test-token");
+        const headers = new Headers(options.headers);
+        expect(headers.get("Authorization")).toBe("Bearer test-token");
         return Promise.resolve(
           createJsonResponse([
             {
@@ -171,7 +172,7 @@ describe("App", () => {
         ])
       );
 
-    global.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     renderApp(["/categories"]);
 
@@ -190,7 +191,7 @@ describe("App", () => {
     const postCall = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(postCall[0]).toBe("/api/categories");
     expect(postCall[1].method).toBe("POST");
-    expect((postCall[1].headers as Headers).get("Authorization")).toBe("Bearer test-token");
+    expect(new Headers(postCall[1].headers).get("Authorization")).toBe("Bearer test-token");
     expect(JSON.parse(String(postCall[1].body))).toEqual({
       name: "Travel",
       color: "#f97316",
