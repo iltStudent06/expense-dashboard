@@ -1,81 +1,91 @@
 # Expense Tracker / Budget Dashboard
 
-Full-stack capstone project with a custom landing page, React + TypeScript SPA, Express + TypeScript API, MongoDB, Docker, Kubernetes manifests, and GitHub Actions CI.
+Full-stack capstone project with:
 
-## Deployment URL
+- a custom landing page (`/`)
+- a React + TypeScript SPA (`/app`)
+- an Express + TypeScript API
+- MongoDB persistence
+- Docker and Kubernetes deployment assets
+- GitHub Actions CI and API deployment workflow
 
-- Public URL: provision from the Kubernetes `LoadBalancer` or ingress after deployment to EKS.
-- Local full-stack URL: `http://localhost:9000/`
+## Current architecture
 
-## Team
+- **Frontend**: React 18, TypeScript, Vite 5, React Router
+- **Backend**: Express, TypeScript, Mongoose, JWT auth
+- **Database**: MongoDB 7
+- **Container runtime**: Docker / Docker Compose
+- **Orchestration**: Kubernetes manifests under `k8s/`
 
-| Team member | Responsibility |
-| --- | --- |
-| ginamei | Full-stack implementation across React, API, testing, and deployment assets |
-| iltStudent10 | Full-stack implementation across landing page, UI workflow, testing, and delivery assets |
+## Repository layout
 
-## Feature list
-
-- semantic HTML/CSS landing page served at `/`
-- React + TypeScript SPA served at `/app`
-- JWT authentication with register, login, and protected write routes
-- MongoDB + Mongoose models for `User`, `Category`, and `Transaction`
-- CRUD operations for categories and transactions
-- dashboard summary, category breakdowns, and 6-month trend views
-- transaction detail view with related category data
-- Docker Compose stack for local full-stack execution
-- Kubernetes manifests for namespace, MongoDB, API, frontend, secret example, and ingress
-- GitHub Actions CI for backend/frontend typecheck, tests, and Docker builds
-
-## Current behavior
-
-- The API persists users, categories, and transactions in MongoDB.
-- Authenticated users can create, edit, and delete transactions and categories.
-- The frontend includes a landing page, login/register flow, protected dashboard, protected categories page, and transaction detail page.
-- Data survives container restarts when the MongoDB volume is preserved.
-
-## App routes
-
-- Landing page: `http://localhost:9000/`
-- React app root: `http://localhost:9000/app/`
-- Login: `http://localhost:9000/app/login`
-- Register: `http://localhost:9000/app/register`
-- Categories: `http://localhost:9000/app/categories`
-- API health: `http://localhost:3000/health`
+- `src/` backend TypeScript source
+- `test/` backend integration tests
+- `frontend/src/` frontend application source
+- `frontend/public/landing.html` static landing page
+- `scripts/seed-transactions.js` seed utility script
+- `k8s/` Kubernetes manifests
+- `.github/workflows/` CI and deployment workflows
 
 ## Prerequisites
 
 - Node.js 20+
 - npm
-- Docker (optional, for containerized runs)
-- kubectl + kind (optional, for local Kubernetes validation)
+- Docker (optional)
+- Kubernetes cluster + `kubectl` (optional)
 
-## Run locally (API)
+## Environment variables (API)
+
+Copy and update:
 
 ```bash
-npm install
 cp .env.example .env
-export MONGO_URI="mongodb://localhost:27017/expense_dashboard"
+```
+
+Default values in `.env.example`:
+
+- `MONGO_URI`
+- `MONGO_DB`
+- `JWT_SECRET`
+- `PORT`
+
+## Run locally (without Docker)
+
+### 1) Start MongoDB
+
+You need a MongoDB instance reachable by `MONGO_URI`.
+
+Example using Docker:
+
+```bash
+docker run --rm -d \
+  --name expense-mongo \
+  -p 27017:27017 \
+  -e MONGO_INITDB_ROOT_USERNAME=expense_user \
+  -e MONGO_INITDB_ROOT_PASSWORD=expense_pass \
+  mongo:7
+```
+
+### 2) Start backend API
+
+From repo root:
+
+```bash
+npm install
 npm run dev
 ```
 
-- API URL: `http://localhost:3000`
-- Health endpoint: `GET /health`
-- If MongoDB is not running, API requests will fail until a database connection is available.
+API runs on `http://localhost:3000` by default.
 
-Auth notes:
-
-- `POST /api/auth/register` creates a user and returns a JWT.
-- `POST /api/auth/login` returns a JWT for an existing user.
-- Protected write routes require `Authorization: Bearer <token>`.
-
-For non-watch mode:
+Health check:
 
 ```bash
-npm run start
+curl http://localhost:3000/health
 ```
 
-## Run locally (Frontend)
+### 3) Start frontend
+
+In a second terminal:
 
 ```bash
 cd frontend
@@ -83,223 +93,179 @@ npm install
 npm run dev
 ```
 
-- Frontend URL: `http://localhost:5173`
-- Vite proxies `/api` requests to `http://localhost:3000`
-- In Vite dev mode, the React app is served directly.
-- In Docker Compose, Nginx serves the landing page at `/` and the React app at `/app/`.
+Frontend dev server runs on `http://localhost:5173`.
 
-## Testing
+Notes:
 
-Backend API tests:
+- Vite dev proxy forwards `/api` to `http://localhost:3000`.
+- Frontend build is configured with Vite base `/app/`.
 
-```bash
-npm test
-npm run typecheck
-```
+## App routes
 
-Frontend tests:
+### Frontend routes
 
-```bash
-cd frontend
-npm test
-npm run typecheck
-```
+- `/` dashboard (protected)
+- `/categories` categories management (protected)
+- `/transactions/:id` transaction detail (protected)
+- `/login`
+- `/register`
 
-What is covered now:
-
-- backend auth, categories, transactions, and dashboard integration tests
-- frontend auth redirect, dashboard rendering, and category creation tests
-
-## API endpoints
+### API routes
 
 - `GET /health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/categories`
 - `GET /api/categories/:id`
-- `POST /api/categories`
-- `PUT /api/categories/:id`
-- `DELETE /api/categories/:id`
-- `POST /api/transactions`
+- `POST /api/categories` (auth required)
+- `PUT /api/categories/:id` (auth required)
+- `DELETE /api/categories/:id` (auth required)
+- `GET /api/transactions`
 - `GET /api/transactions/:id`
-- `PUT /api/transactions/:id`
-- `DELETE /api/transactions/:id`
-- `GET /api/transactions?type=income|expense&category=<name>&month=YYYY-MM`
-- `GET /api/summary?month=YYYY-MM`
-- `GET /api/trends?months=6`
+- `POST /api/transactions` (auth required)
+- `PUT /api/transactions/:id` (auth required)
+- `DELETE /api/transactions/:id` (auth required)
+- `GET /api/summary`
+- `GET /api/trends`
 - `GET /api/dashboard`
 
-### Example: register a user
+## Authentication behavior
 
-```bash
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Demo User",
-    "email": "demo@example.com",
-    "password": "secret123",
-    "role": "user"
-  }'
+- JWT is returned by register/login endpoints.
+- Write routes for categories and transactions require:
+
+```text
+Authorization: Bearer <token>
 ```
 
-### Example: create a transaction
+- If `JWT_SECRET` is not set, API falls back to a development default secret. Set a strong value for non-dev environments.
+
+## Testing and type checking
+
+### Backend (repo root)
 
 ```bash
-curl -X POST http://localhost:3000/api/transactions \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "expense",
-    "amount": 45.25,
-    "category": "Groceries",
-    "description": "Weekly shopping",
-    "date": "2026-09-09"
-  }'
+npm run typecheck
+npm test
 ```
 
-## Seed data (income + expenses)
-
-Sample seed data is available in `seed/transactions.json`.
-
-Run seed against local API:
+### Frontend
 
 ```bash
-npm run seed
+cd frontend
+npm run typecheck
+npm test
+npm run build
 ```
 
-Optional overrides:
+## Docker
 
-```bash
-API_URL=http://localhost:3000 npm run seed
-SEED_FILE=seed/transactions.json npm run seed
-```
-
-Quick check after seeding:
-
-```bash
-curl "http://localhost:3000/api/summary?month=2026-09"
-```
-
-## Frontend features
-
-- protected dashboard with monthly totals and recent transactions
-- category filter on dashboard data
-- visual income and expense breakdown bars by category
-- protected categories CRUD page
-- protected transaction detail page with related category information
-- login/register forms with session persistence in local storage
-
-## Docker (API)
-
-Build:
+### API image
 
 ```bash
 docker build -t expense-dashboard-api .
 ```
 
-Run:
+### Frontend image
 
 ```bash
-docker run --rm -p 3000:3000 expense-dashboard-api
+docker build -t expense-dashboard-frontend ./frontend
 ```
 
-## Docker Compose (Frontend + API + MongoDB)
+## Docker Compose (full stack)
 
-Run all services:
+Run:
 
 ```bash
 docker compose up --build
 ```
 
-Detached mode:
+Run detached:
 
 ```bash
 docker compose up --build -d
 ```
 
-Stop services:
+Stop:
 
 ```bash
 docker compose down
 ```
 
-Stop services and remove DB volume:
+Stop and remove DB volume:
 
 ```bash
 docker compose down -v
 ```
 
-### Compose environment variables
+Default ports:
 
-- `API_PORT` (default: `3000`)
-- `FRONTEND_PORT` (default: `8080`)
-- `PORT` (default: `3000`, inside API container)
-- `NODE_ENV` (default: `production`)
-- `MONGO_PORT` (default: `27018`)
-- `MONGO_DB` (default: `expense_dashboard`)
-- `MONGO_INITDB_ROOT_USERNAME` (default: `expense_user`)
-- `MONGO_INITDB_ROOT_PASSWORD` (default: `expense_pass`)
+- Frontend: `8080` (host) → `80` (container)
+- API: `3000` (host) → `3000` (container)
+- MongoDB: `27018` (host) → `27017` (container)
 
-Notes:
+Compose environment overrides:
 
-- Compose includes a named volume: `expense_dashboard_mongodb_data`.
-- Compose defines health checks for frontend, API, and MongoDB.
-- API uses MongoDB via `MONGO_URI`/`MONGO_DB` environment variables.
+- `FRONTEND_PORT`
+- `API_PORT`
+- `MONGO_PORT`
+- `NODE_ENV`
+- `PORT`
+- `MONGO_DB`
+- `MONGO_INITDB_ROOT_USERNAME`
+- `MONGO_INITDB_ROOT_PASSWORD`
 
 ## Kubernetes
 
-Kubernetes manifests are provided in the `k8s/` directory:
+Manifests provided:
 
 - `k8s/namespace.yaml`
-- `k8s/expense-api-secret.example.yaml`
 - `k8s/expense-mongo.yaml`
 - `k8s/expense-api-deployment.yaml`
 - `k8s/expense-api-service.yaml`
 - `k8s/expense-frontend-deployment.yaml`
 - `k8s/expense-frontend-service.yaml`
 - `k8s/expense-ingress.yaml`
+- `k8s/expense-api-secret.example.yaml`
 
-Create secret for dev/staging:
+### Apply order
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
-kubectl create secret generic expense-api-secrets \
-  --from-literal=MONGO_ROOT_USERNAME='expense_user' \
-  --from-literal=MONGO_ROOT_PASSWORD='expense_pass' \
-  --from-literal=MONGO_URI='mongodb://expense_user:expense_pass@expense-mongo:27017/expense_dashboard?authSource=admin' \
-  --from-literal=MONGO_DB='expense_dashboard' \
-  --from-literal=MONGO_COLLECTION='transactions' \
-  --from-literal=JWT_SECRET='<long-random-secret>' \
-  -n expense-dashboard
-```
-
-Or use a local copy of the example manifest:
-
-```bash
-cp k8s/expense-api-secret.example.yaml /tmp/expense-api-secret.yaml
-# edit /tmp/expense-api-secret.yaml with real values
-kubectl apply -f /tmp/expense-api-secret.yaml
-```
-
-Apply manifests:
-
-```bash
-# first apply your real secret (created via command above or local edited file)
+kubectl apply -f k8s/expense-api-secret.example.yaml
 kubectl apply -f k8s/expense-mongo.yaml
 kubectl apply -f k8s/expense-api-deployment.yaml
 kubectl apply -f k8s/expense-api-service.yaml
 kubectl apply -f k8s/expense-frontend-deployment.yaml
 kubectl apply -f k8s/expense-frontend-service.yaml
 kubectl apply -f k8s/expense-ingress.yaml
-kubectl rollout status deployment/expense-mongo -n expense-dashboard --timeout=180s
-kubectl rollout status deployment/expense-api -n expense-dashboard --timeout=180s
-kubectl rollout status deployment/expense-frontend -n expense-dashboard --timeout=180s
-kubectl get svc -n expense-dashboard
 ```
 
-## CI/CD
+### Quick checks
 
-- CI workflow: `.github/workflows/ci.yml`
-- EKS deploy workflow: `.github/workflows/deploy-api.yml`
+```bash
+kubectl get all -n expense-dashboard
+kubectl rollout status deployment/expense-api -n expense-dashboard
+kubectl rollout status deployment/expense-frontend -n expense-dashboard
+kubectl rollout status deployment/expense-mongo -n expense-dashboard
+```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram, endpoint inventory, and deployment layout.
+## GitHub Actions workflows
+
+- `ci.yml`
+  - backend install/typecheck/tests/docker build
+  - frontend install/typecheck/tests/build/docker build
+- `deploy-api.yml`
+  - builds/scans/pushes API image
+  - deploys API to EKS and updates `expense-api` image
+
+## Seed script status
+
+`scripts/seed-transactions.js` posts directly to `POST /api/transactions` without auth headers.
+
+Because that endpoint currently requires JWT authentication, the seed script will fail with `401` unless the API auth requirements are changed or the script is updated to include an auth token.
+
+## Additional docs
+
+- `DEPLOYMENT.md` detailed deployment notes
+- `ARCHITECTURE.md` architecture summary
