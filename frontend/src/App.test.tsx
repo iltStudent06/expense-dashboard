@@ -5,7 +5,7 @@ import App from "./App";
 
 const AUTH_STORAGE_KEY = "expense-dashboard-auth";
 
-function renderApp(initialEntries = ["/"]) {
+function renderApp(initialEntries: string[] = ["/"]) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <App />
@@ -13,18 +13,18 @@ function renderApp(initialEntries = ["/"]) {
   );
 }
 
-function createJsonResponse(body, ok = true, status = 200) {
+function createJsonResponse<T>(body: T, ok = true, status = 200) {
   return {
     ok,
     status,
     json: async () => body
-  };
+  } as Response;
 }
 
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    global.fetch = vi.fn();
+    global.fetch = vi.fn() as unknown as typeof fetch;
   });
 
   test("redirects unauthenticated users from dashboard to login", async () => {
@@ -43,7 +43,8 @@ describe("App", () => {
       })
     );
 
-    global.fetch.mockImplementation((path, options = {}) => {
+    const fetchMock = vi.mocked(global.fetch);
+    fetchMock.mockImplementation((path, options = {}) => {
       if (typeof path === "string" && path.startsWith("/api/transactions?month=")) {
         return Promise.resolve(
           createJsonResponse([
@@ -86,21 +87,35 @@ describe("App", () => {
       }
 
       if (path === "/api/categories") {
-        expect(options.headers.Authorization).toBe("Bearer test-token");
+        expect((options.headers as Headers).get("Authorization")).toBe("Bearer test-token");
         return Promise.resolve(
           createJsonResponse([
-            { id: "cat-1", name: "Groceries", color: "#10b981", description: "Food", updatedAt: "2026-09-18T00:00:00.000Z" },
-            { id: "cat-2", name: "Utilities", color: "#2563eb", description: "Bills", updatedAt: "2026-09-19T00:00:00.000Z" }
+            {
+              id: "cat-1",
+              name: "Groceries",
+              color: "#10b981",
+              description: "Food",
+              updatedAt: "2026-09-18T00:00:00.000Z"
+            },
+            {
+              id: "cat-2",
+              name: "Utilities",
+              color: "#2563eb",
+              description: "Bills",
+              updatedAt: "2026-09-19T00:00:00.000Z"
+            }
           ])
         );
       }
 
-      return Promise.reject(new Error(`Unhandled fetch path: ${path}`));
+      return Promise.reject(new Error(`Unhandled fetch path: ${String(path)}`));
     });
 
     renderApp(["/"]);
 
-    expect(await screen.findByRole("heading", { name: /Expense Tracker \/ Budget Dashboard/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /Expense Tracker \/ Budget Dashboard/i })
+    ).toBeInTheDocument();
     expect(screen.getByText("Total Categories")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Weekly shopping")).toBeInTheDocument();
@@ -116,8 +131,7 @@ describe("App", () => {
       })
     );
 
-    const fetchMock = vi
-      .fn()
+    const fetchMock = vi.fn()
       .mockResolvedValueOnce(
         createJsonResponse([
           {
@@ -157,7 +171,7 @@ describe("App", () => {
         ])
       );
 
-    global.fetch = fetchMock;
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     renderApp(["/categories"]);
 
@@ -173,11 +187,11 @@ describe("App", () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
-    const postCall = fetchMock.mock.calls[1];
+    const postCall = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(postCall[0]).toBe("/api/categories");
     expect(postCall[1].method).toBe("POST");
-    expect(postCall[1].headers.Authorization).toBe("Bearer test-token");
-    expect(JSON.parse(postCall[1].body)).toEqual({
+    expect((postCall[1].headers as Headers).get("Authorization")).toBe("Bearer test-token");
+    expect(JSON.parse(String(postCall[1].body))).toEqual({
       name: "Travel",
       color: "#f97316",
       description: "Trips"

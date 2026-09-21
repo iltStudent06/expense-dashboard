@@ -1,22 +1,128 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode
+} from "react";
 import { Link, NavLink, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 
-// Optional API prefix, useful when frontend and backend are hosted on different origins.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 const AUTH_STORAGE_KEY = "expense-dashboard-auth";
 
-const AuthContext = createContext(null);
+type UserRole = "user" | "admin";
+type TransactionType = "income" | "expense";
+type TrendMetric = "income" | "expenses" | "balance";
 
-function loadAuthSession() {
+interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
+interface AuthSession {
+  token: string;
+  user: AuthUser;
+}
+
+interface AuthContextValue {
+  session: AuthSession | null;
+  signIn: (nextSession: AuthSession) => void;
+  signOut: () => void;
+  isAuthenticated: boolean;
+}
+
+interface ApiErrorPayload {
+  error?: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  color: string;
+  description: string;
+  ownerUserId?: string | null;
+  createdAt?: string;
+  updatedAt: string;
+}
+
+interface Transaction {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  category: string;
+  categoryId: string | null;
+  description: string;
+  date: string;
+  categoryDetails?: Category | null;
+}
+
+interface SummaryResponse {
+  month?: string;
+  totals: {
+    income: number;
+    expenses: number;
+    balance: number;
+  };
+  byCategory?: {
+    income?: Record<string, number>;
+    expenses?: Record<string, number>;
+  };
+  transactionCount?: number;
+}
+
+interface TrendEntry {
+  month: string;
+  income: number;
+  expenses: number;
+  balance: number;
+}
+
+interface TrendsResponse {
+  months: number;
+  trends: TrendEntry[];
+}
+
+interface DashboardOverview {
+  totals: {
+    transactions: number;
+    users: number;
+    categories: number;
+  };
+  groupedCounts?: Record<string, number>;
+  recentTransactions: Transaction[];
+}
+
+interface TransactionForm {
+  type: TransactionType;
+  amount: string;
+  categoryId: string;
+  category: string;
+  description: string;
+  date: string;
+}
+
+interface CategoryForm {
+  name: string;
+  color: string;
+  description: string;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+function loadAuthSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? (JSON.parse(raw) as AuthSession) : null;
   } catch {
     return null;
   }
 }
 
-function saveAuthSession(session) {
+function saveAuthSession(session: AuthSession | null) {
   if (session) {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
   } else {
@@ -33,10 +139,10 @@ function useAuth() {
   return context;
 }
 
-function AuthProvider({ children }) {
-  const [session, setSession] = useState(loadAuthSession);
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<AuthSession | null>(loadAuthSession);
 
-  function signIn(nextSession) {
+  function signIn(nextSession: AuthSession) {
     setSession(nextSession);
     saveAuthSession(nextSession);
   }
@@ -47,28 +153,28 @@ function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, signIn, signOut, isAuthenticated: Boolean(session?.token) }}>
+    <AuthContext.Provider
+      value={{ session, signIn, signOut, isAuthenticated: Boolean(session?.token) }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Formats numeric values as USD for dashboard metrics and table amounts.
-function formatCurrency(amount) {
+function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD"
   }).format(amount || 0);
 }
 
-// Initializes the month filter to the current year-month (YYYY-MM).
 function getCurrentMonth() {
   const now = new Date();
   const month = `${now.getMonth() + 1}`.padStart(2, "0");
   return `${now.getFullYear()}-${month}`;
 }
 
-function buildDashboardQuery(selectedMonth, selectedCategory) {
+function buildDashboardQuery(selectedMonth: string, selectedCategory: string) {
   const params = new URLSearchParams();
 
   if (selectedMonth) {
@@ -83,13 +189,13 @@ function buildDashboardQuery(selectedMonth, selectedCategory) {
   return query ? `?${query}` : "";
 }
 
-function getBreakdownEntries(group = {}) {
+function getBreakdownEntries(group: Record<string, number> = {}) {
   return Object.entries(group)
     .map(([name, amount]) => ({ name, amount: Number(amount) || 0 }))
     .sort((a, b) => b.amount - a.amount);
 }
 
-function getTrendPresentation(metric) {
+function getTrendPresentation(metric: TrendMetric) {
   if (metric === "income") {
     return { label: "Income", className: "income", accent: "#10b981" };
   }
@@ -101,22 +207,24 @@ function getTrendPresentation(metric) {
   return { label: "Balance", className: "balance", accent: "#2563eb" };
 }
 
-// Shared fetch helper that applies JSON headers and normalizes API errors.
-async function request(path, options = {}) {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const session = loadAuthSession();
+  const headers = new Headers(options.headers ?? {});
+  headers.set("Content-Type", "application/json");
+
+  if (session?.token) {
+    headers.set("Authorization", `Bearer ${session.token}`);
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
-      ...(options.headers || {})
-    },
-    ...options
+    ...options,
+    headers
   });
 
   if (!response.ok) {
     let errorMessage = `Request failed: ${response.status}`;
     try {
-      const payload = await response.json();
+      const payload = (await response.json()) as ApiErrorPayload;
       if (payload?.error) {
         errorMessage = payload.error;
       }
@@ -126,7 +234,11 @@ async function request(path, options = {}) {
     throw new Error(errorMessage);
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Request failed";
 }
 
 function AppShell() {
@@ -191,13 +303,13 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      const response = await request("/api/auth/login", {
+      const response = await request<AuthSession>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify(form)
       });
@@ -205,7 +317,7 @@ function LoginPage() {
       signIn(response);
       navigate("/");
     } catch (submitError) {
-      setError(submitError.message);
+      setError(getErrorMessage(submitError));
     } finally {
       setLoading(false);
     }
@@ -262,17 +374,17 @@ function LoginPage() {
 function RegisterPage() {
   const navigate = useNavigate();
   const { signIn } = useAuth();
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user" as UserRole });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      const response = await request("/api/auth/register", {
+      const response = await request<AuthSession>("/api/auth/register", {
         method: "POST",
         body: JSON.stringify(form)
       });
@@ -280,7 +392,7 @@ function RegisterPage() {
       signIn(response);
       navigate("/");
     } catch (submitError) {
-      setError(submitError.message);
+      setError(getErrorMessage(submitError));
     } finally {
       setLoading(false);
     }
@@ -330,7 +442,7 @@ function RegisterPage() {
             Role
             <select
               value={form.role}
-              onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
+              onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as UserRole }))}
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
@@ -353,32 +465,29 @@ function RegisterPage() {
   );
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 }
 
 function DashboardPage() {
-  // Global dashboard state: filters, API data, and request/error lifecycle.
   const [month, setMonth] = useState(getCurrentMonth());
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [trendMetric, setTrendMetric] = useState("balance");
-  const [transactions, setTransactions] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [trends, setTrends] = useState([]);
-  const [overview, setOverview] = useState(null);
-  const [categories, setCategories] = useState([]);
+  const [trendMetric, setTrendMetric] = useState<TrendMetric>("balance");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [summary, setSummary] = useState<SummaryResponse | null>(null);
+  const [trends, setTrends] = useState<TrendEntry[]>([]);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  // Inline editing state for a selected transaction row.
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<TransactionForm>({
     type: "expense",
     amount: "",
     categoryId: "",
@@ -386,9 +495,7 @@ function DashboardPage() {
     description: "",
     date: ""
   });
-
-  // Form state for creating a new transaction.
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<TransactionForm>({
     type: "expense",
     amount: "",
     categoryId: "",
@@ -397,19 +504,18 @@ function DashboardPage() {
     date: new Date().toISOString().slice(0, 10)
   });
 
-  // Loads transactions, summary, and trend data for the selected month.
-  async function loadDashboard(selectedMonth, selectedCategory) {
+  async function loadDashboard(selectedMonth: string, selectedCategory: string) {
     setLoading(true);
     setError("");
 
     try {
       const query = buildDashboardQuery(selectedMonth, selectedCategory);
       const [txData, summaryData, trendData, overviewData, categoryData] = await Promise.all([
-        request(`/api/transactions${query}`),
-        request(`/api/summary${query}`),
-        request("/api/trends?months=6"),
-        request("/api/dashboard"),
-        request("/api/categories")
+        request<Transaction[]>(`/api/transactions${query}`),
+        request<SummaryResponse>(`/api/summary${query}`),
+        request<TrendsResponse>("/api/trends?months=6"),
+        request<DashboardOverview>("/api/dashboard"),
+        request<Category[]>("/api/categories")
       ]);
 
       setTransactions(txData);
@@ -418,24 +524,22 @@ function DashboardPage() {
       setOverview(overviewData);
       setCategories(categoryData);
     } catch (loadError) {
-      setError(loadError.message);
+      setError(getErrorMessage(loadError));
     } finally {
       setLoading(false);
     }
   }
 
-  // Refresh dashboard whenever the month filter changes.
   useEffect(() => {
-    loadDashboard(month, categoryFilter);
+    void loadDashboard(month, categoryFilter);
   }, [month, categoryFilter]);
 
-  // Creates a new transaction and refreshes dashboard data.
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
     try {
-      await request("/api/transactions", {
+      await request<Transaction>("/api/transactions", {
         method: "POST",
         body: JSON.stringify({
           ...form,
@@ -453,12 +557,11 @@ function DashboardPage() {
       }));
       await loadDashboard(month, categoryFilter);
     } catch (submitError) {
-      setError(submitError.message);
+      setError(getErrorMessage(submitError));
     }
   }
 
-  // Puts a table row into edit mode and pre-fills editable fields.
-  function startEditing(item) {
+  function startEditing(item: Transaction) {
     const matchedCategory =
       categories.find((entry) => entry.id === item.categoryId) ??
       categories.find((entry) => entry.name.toLowerCase() === String(item.category).toLowerCase());
@@ -474,7 +577,6 @@ function DashboardPage() {
     });
   }
 
-  // Exits edit mode and clears temporary edit fields.
   function cancelEditing() {
     setEditingId(null);
     setEditForm({
@@ -487,12 +589,11 @@ function DashboardPage() {
     });
   }
 
-  // Saves an edited transaction via API and refreshes current view.
-  async function handleUpdate(itemId) {
+  async function handleUpdate(itemId: string) {
     setError("");
 
     try {
-      await request(`/api/transactions/${itemId}`, {
+      await request<Transaction>(`/api/transactions/${itemId}`, {
         method: "PUT",
         body: JSON.stringify({
           ...editForm,
@@ -504,16 +605,15 @@ function DashboardPage() {
       cancelEditing();
       await loadDashboard(month, categoryFilter);
     } catch (updateError) {
-      setError(updateError.message);
+      setError(getErrorMessage(updateError));
     }
   }
 
-  // Deletes a transaction via API and refreshes current view.
-  async function handleDelete(itemId) {
+  async function handleDelete(itemId: string) {
     setError("");
 
     try {
-      await request(`/api/transactions/${itemId}`, {
+      await request<Transaction>(`/api/transactions/${itemId}`, {
         method: "DELETE"
       });
 
@@ -523,11 +623,10 @@ function DashboardPage() {
 
       await loadDashboard(month, categoryFilter);
     } catch (deleteError) {
-      setError(deleteError.message);
+      setError(getErrorMessage(deleteError));
     }
   }
 
-  // Derived totals fallback while summary is loading/unavailable.
   const totals = summary?.totals ?? { income: 0, expenses: 0, balance: 0 };
   const appTotals = overview?.totals ?? { transactions: 0, users: 0, categories: 0 };
   const expenseBreakdown = getBreakdownEntries(summary?.byCategory?.expenses);
@@ -538,11 +637,10 @@ function DashboardPage() {
     ...incomeBreakdown.map((entry) => entry.amount)
   );
   const trendPresentation = getTrendPresentation(trendMetric);
-  const maxTrendAmount = Math.max(1, ...trends.map((entry) => Math.abs(Number(entry[trendMetric]) || 0)));
+  const maxTrendAmount = Math.max(1, ...trends.map((entry) => Math.abs(entry[trendMetric]) || 0));
 
-  // Sorts transactions newest-first for the Recent Transactions table.
   const orderedTransactions = useMemo(
-    () => [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)),
+    () => [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [transactions]
   );
 
@@ -572,7 +670,6 @@ function DashboardPage() {
         </article>
       </section>
 
-      {/* Transaction entry form */}
       <section className="panel">
         <h2>Log Transaction</h2>
         <form className="form" onSubmit={handleSubmit}>
@@ -580,7 +677,9 @@ function DashboardPage() {
             Type
             <select
               value={form.type}
-              onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, type: event.target.value as TransactionType }))
+              }
             >
               <option value="expense">Expense</option>
               <option value="income">Income</option>
@@ -656,7 +755,6 @@ function DashboardPage() {
         </form>
       </section>
 
-      {/* Month filter controlling table and summary scope */}
       <section className="panel filters">
         <h2>Filters</h2>
         <div className="filter-grid">
@@ -667,10 +765,7 @@ function DashboardPage() {
 
           <label>
             Category
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-            >
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
               <option value="">All categories</option>
               {categories.map((item) => (
                 <option key={item.id} value={item.name}>
@@ -682,11 +777,9 @@ function DashboardPage() {
         </div>
       </section>
 
-      {/* Request status messages */}
       {error ? <p className="error">{error}</p> : null}
       {loading ? <p>Loading...</p> : null}
 
-      {/* High-level totals for selected month */}
       <section className="grid">
         <article className="panel">
           <h3>Income</h3>
@@ -752,7 +845,6 @@ function DashboardPage() {
         </article>
       </section>
 
-      {/* Transaction list with inline edit/delete actions */}
       <section className="panel">
         <h2>Recent Transactions</h2>
         <div className="table-wrap">
@@ -791,7 +883,10 @@ function DashboardPage() {
                         <select
                           value={editForm.type}
                           onChange={(event) =>
-                            setEditForm((prev) => ({ ...prev, type: event.target.value }))
+                            setEditForm((prev) => ({
+                              ...prev,
+                              type: event.target.value as TransactionType
+                            }))
                           }
                         >
                           <option value="expense">Expense</option>
@@ -900,7 +995,6 @@ function DashboardPage() {
         </div>
       </section>
 
-      {/* Multi-month trend breakdown for income/expenses/balance */}
       <section className="panel">
         <div className="panel-heading">
           <div>
@@ -910,7 +1004,7 @@ function DashboardPage() {
 
           <label className="trend-select">
             Trend Metric
-            <select value={trendMetric} onChange={(event) => setTrendMetric(event.target.value)}>
+            <select value={trendMetric} onChange={(event) => setTrendMetric(event.target.value as TrendMetric)}>
               <option value="income">Income</option>
               <option value="expenses">Expenses</option>
               <option value="balance">Balance</option>
@@ -920,10 +1014,7 @@ function DashboardPage() {
 
         <div className="trend-chart-panel">
           <div className="trend-summary">
-            <span
-              className={`trend-dot ${trendPresentation.className}`}
-              aria-hidden="true"
-            />
+            <span className={`trend-dot ${trendPresentation.className}`} aria-hidden="true" />
             <div>
               <p className="eyebrow">Active metric</p>
               <h3>{trendPresentation.label}</h3>
@@ -931,21 +1022,21 @@ function DashboardPage() {
           </div>
 
           <div className="trend-chart" aria-label={`${trendPresentation.label} trend chart`}>
-          {trends.map((item) => (
-            <div key={`trend-chart-${item.month}`} className="trend-card">
-              <div className="trend-row-header">
-                <span>{item.month}</span>
-                <strong>{formatCurrency(item[trendMetric])}</strong>
+            {trends.map((item) => (
+              <div key={`trend-chart-${item.month}`} className="trend-card">
+                <div className="trend-row-header">
+                  <span>{item.month}</span>
+                  <strong>{formatCurrency(item[trendMetric])}</strong>
+                </div>
+                <div className="breakdown-bar-shell trend-bar-shell">
+                  <div
+                    className={`breakdown-bar ${trendPresentation.className}`}
+                    style={{ width: `${(Math.abs(item[trendMetric]) / maxTrendAmount) * 100}%` }}
+                  />
+                </div>
               </div>
-              <div className="breakdown-bar-shell trend-bar-shell">
-                <div
-                  className={`breakdown-bar ${trendPresentation.className}`}
-                  style={{ width: `${(Math.abs(item[trendMetric]) / maxTrendAmount) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
-          {!trends.length ? <p className="muted">No trend data available.</p> : null}
+            ))}
+            {!trends.length ? <p className="muted">No trend data available.</p> : null}
           </div>
         </div>
 
@@ -982,17 +1073,17 @@ function DashboardPage() {
 }
 
 function CategoriesPage() {
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<CategoryForm>({
     name: "",
     color: "#2563eb",
     description: ""
   });
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<CategoryForm>({
     name: "",
     color: "#2563eb",
     description: ""
@@ -1003,26 +1094,26 @@ function CategoriesPage() {
     setError("");
 
     try {
-      const data = await request("/api/categories");
+      const data = await request<Category[]>("/api/categories");
       setCategories(data);
     } catch (loadError) {
-      setError(loadError.message);
+      setError(getErrorMessage(loadError));
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadCategories();
+    void loadCategories();
   }, []);
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
 
     try {
-      await request("/api/categories", {
+      await request<Category>("/api/categories", {
         method: "POST",
         body: JSON.stringify(form)
       });
@@ -1030,13 +1121,13 @@ function CategoriesPage() {
       setForm({ name: "", color: "#2563eb", description: "" });
       await loadCategories();
     } catch (submitError) {
-      setError(submitError.message);
+      setError(getErrorMessage(submitError));
     } finally {
       setSaving(false);
     }
   }
 
-  function startEditing(category) {
+  function startEditing(category: Category) {
     setEditingId(category.id);
     setEditForm({
       name: category.name,
@@ -1050,12 +1141,12 @@ function CategoriesPage() {
     setEditForm({ name: "", color: "#2563eb", description: "" });
   }
 
-  async function handleUpdate(categoryId) {
+  async function handleUpdate(categoryId: string) {
     setSaving(true);
     setError("");
 
     try {
-      await request(`/api/categories/${categoryId}`, {
+      await request<Category>(`/api/categories/${categoryId}`, {
         method: "PUT",
         body: JSON.stringify(editForm)
       });
@@ -1063,18 +1154,18 @@ function CategoriesPage() {
       cancelEditing();
       await loadCategories();
     } catch (updateError) {
-      setError(updateError.message);
+      setError(getErrorMessage(updateError));
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(categoryId) {
+  async function handleDelete(categoryId: string) {
     setSaving(true);
     setError("");
 
     try {
-      await request(`/api/categories/${categoryId}`, {
+      await request<Category>(`/api/categories/${categoryId}`, {
         method: "DELETE"
       });
 
@@ -1084,7 +1175,7 @@ function CategoriesPage() {
 
       await loadCategories();
     } catch (deleteError) {
-      setError(deleteError.message);
+      setError(getErrorMessage(deleteError));
     } finally {
       setSaving(false);
     }
