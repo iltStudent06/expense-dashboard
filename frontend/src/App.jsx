@@ -68,6 +68,27 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${month}`;
 }
 
+function buildDashboardQuery(selectedMonth, selectedCategory) {
+  const params = new URLSearchParams();
+
+  if (selectedMonth) {
+    params.set("month", selectedMonth);
+  }
+
+  if (selectedCategory) {
+    params.set("category", selectedCategory);
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function getBreakdownEntries(group = {}) {
+  return Object.entries(group)
+    .map(([name, amount]) => ({ name, amount: Number(amount) || 0 }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 // Shared fetch helper that applies JSON headers and normalizes API errors.
 async function request(path, options = {}) {
   const session = loadAuthSession();
@@ -333,6 +354,7 @@ function ProtectedRoute({ children }) {
 function DashboardPage() {
   // Global dashboard state: filters, API data, and request/error lifecycle.
   const [month, setMonth] = useState(getCurrentMonth());
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [trends, setTrends] = useState([]);
@@ -363,14 +385,15 @@ function DashboardPage() {
   });
 
   // Loads transactions, summary, and trend data for the selected month.
-  async function loadDashboard(selectedMonth) {
+  async function loadDashboard(selectedMonth, selectedCategory) {
     setLoading(true);
     setError("");
 
     try {
+      const query = buildDashboardQuery(selectedMonth, selectedCategory);
       const [txData, summaryData, trendData, overviewData, categoryData] = await Promise.all([
-        request(`/api/transactions?month=${selectedMonth}`),
-        request(`/api/summary?month=${selectedMonth}`),
+        request(`/api/transactions${query}`),
+        request(`/api/summary${query}`),
         request("/api/trends?months=6"),
         request("/api/dashboard"),
         request("/api/categories")
@@ -390,8 +413,8 @@ function DashboardPage() {
 
   // Refresh dashboard whenever the month filter changes.
   useEffect(() => {
-    loadDashboard(month);
-  }, [month]);
+    loadDashboard(month, categoryFilter);
+  }, [month, categoryFilter]);
 
   // Creates a new transaction and refreshes dashboard data.
   async function handleSubmit(event) {
@@ -415,7 +438,7 @@ function DashboardPage() {
         category: "",
         description: ""
       }));
-      await loadDashboard(month);
+      await loadDashboard(month, categoryFilter);
     } catch (submitError) {
       setError(submitError.message);
     }
@@ -466,7 +489,7 @@ function DashboardPage() {
       });
 
       cancelEditing();
-      await loadDashboard(month);
+      await loadDashboard(month, categoryFilter);
     } catch (updateError) {
       setError(updateError.message);
     }
@@ -485,7 +508,7 @@ function DashboardPage() {
         cancelEditing();
       }
 
-      await loadDashboard(month);
+      await loadDashboard(month, categoryFilter);
     } catch (deleteError) {
       setError(deleteError.message);
     }
@@ -494,6 +517,13 @@ function DashboardPage() {
   // Derived totals fallback while summary is loading/unavailable.
   const totals = summary?.totals ?? { income: 0, expenses: 0, balance: 0 };
   const appTotals = overview?.totals ?? { transactions: 0, users: 0, categories: 0 };
+  const expenseBreakdown = getBreakdownEntries(summary?.byCategory?.expenses);
+  const incomeBreakdown = getBreakdownEntries(summary?.byCategory?.income);
+  const maxBreakdownAmount = Math.max(
+    1,
+    ...expenseBreakdown.map((entry) => entry.amount),
+    ...incomeBreakdown.map((entry) => entry.amount)
+  );
 
   // Sorts transactions newest-first for the Recent Transactions table.
   const orderedTransactions = useMemo(
@@ -614,10 +644,27 @@ function DashboardPage() {
       {/* Month filter controlling table and summary scope */}
       <section className="panel filters">
         <h2>Filters</h2>
-        <label>
-          Month
-          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-        </label>
+        <div className="filter-grid">
+          <label>
+            Month
+            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+          </label>
+
+          <label>
+            Category
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="">All categories</option>
+              {categories.map((item) => (
+                <option key={item.id} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
 
       {/* Request status messages */}
@@ -637,6 +684,56 @@ function DashboardPage() {
         <article className="panel">
           <h3>Balance</h3>
           <p className="metric">{formatCurrency(totals.balance)}</p>
+        </article>
+      </section>
+
+      <section className="grid grid-2">
+        <article className="panel">
+          <h2>Expense Breakdown</h2>
+          <div className="breakdown-list" aria-label="Expense breakdown by category">
+            {expenseBreakdown.length ? (
+              expenseBreakdown.map((entry) => (
+                <div key={`expense-${entry.name}`} className="breakdown-item">
+                  <div className="breakdown-labels">
+                    <span>{entry.name}</span>
+                    <strong>{formatCurrency(entry.amount)}</strong>
+                  </div>
+                  <div className="breakdown-bar-shell">
+                    <div
+                      className="breakdown-bar expense"
+                      style={{ width: `${(entry.amount / maxBreakdownAmount) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No expense categories for the current filter.</p>
+            )}
+          </div>
+        </article>
+
+        <article className="panel">
+          <h2>Income Breakdown</h2>
+          <div className="breakdown-list" aria-label="Income breakdown by category">
+            {incomeBreakdown.length ? (
+              incomeBreakdown.map((entry) => (
+                <div key={`income-${entry.name}`} className="breakdown-item">
+                  <div className="breakdown-labels">
+                    <span>{entry.name}</span>
+                    <strong>{formatCurrency(entry.amount)}</strong>
+                  </div>
+                  <div className="breakdown-bar-shell">
+                    <div
+                      className="breakdown-bar income"
+                      style={{ width: `${(entry.amount / maxBreakdownAmount) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No income categories for the current filter.</p>
+            )}
+          </div>
         </article>
       </section>
 

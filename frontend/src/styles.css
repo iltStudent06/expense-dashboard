@@ -182,6 +182,12 @@ h3 {
   font-size: 14px;
 }
 
+.filter-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .span-2 {
   grid-column: span 2;
 }
@@ -208,6 +214,10 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .metric {
   font-size: 28px;
   font-weight: 700;
@@ -217,6 +227,11 @@ button {
 .error {
   color: #b91c1c;
   margin: 8px 0 16px;
+}
+
+.muted {
+  margin: 0;
+  color: #6b7280;
 }
 
 .table-wrap {
@@ -269,9 +284,50 @@ td select {
   border: 1px solid rgba(17, 24, 39, 0.08);
 }
 
+.breakdown-list {
+  display: grid;
+  gap: 14px;
+}
+
+.breakdown-item {
+  display: grid;
+  gap: 8px;
+}
+
+.breakdown-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.breakdown-bar-shell {
+  width: 100%;
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.breakdown-bar {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.breakdown-bar.expense {
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+.breakdown-bar.income {
+  background: linear-gradient(90deg, #10b981, #22c55e);
+}
+
 @media (max-width: 768px) {
   .form,
-  .grid {
+  .grid,
+  .filter-grid,
+  .grid-2 {
     grid-template-columns: 1fr;
   }
 
