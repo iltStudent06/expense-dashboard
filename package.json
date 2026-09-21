@@ -2,18 +2,35 @@
   "name": "expense-dashboard-api",
   "version": "1.0.0",
   "description": "Expense Tracker / Budget Dashboard API",
-  "main": "src/server.js",
+  "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "seed": "node scripts/seed-transactions.js"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "seed": "node scripts/seed-transactions.js",
+    "test": "node --import tsx --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "express": "^4.21.2",
-    "mongodb": "^7.6.0"
+    "jsonwebtoken": "^9.0.3",
+    "mongodb": "^7.6.0",
+    "mongoose": "^9.10.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.13.6",
+    "@types/supertest": "^6.0.3",
+    "mongodb-memory-server": "^10.2.1",
+    "supertest": "^7.1.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
   }
 }

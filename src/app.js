@@ -1,5 +1,7 @@
 import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 const app = express();
 app.use(express.json());
@@ -8,12 +10,21 @@ app.use(express.json());
 const mongoUri = process.env.MONGO_URI ?? "mongodb://localhost:27017/expense_dashboard";
 const mongoDbName = process.env.MONGO_DB ?? "expense_dashboard";
 const mongoCollectionName = process.env.MONGO_COLLECTION ?? "transactions";
+const usersCollectionName = process.env.MONGO_USERS_COLLECTION ?? "users";
+const categoriesCollectionName = process.env.MONGO_CATEGORIES_COLLECTION ?? "categories";
+const jwtSecret = process.env.JWT_SECRET ?? "dev-secret-change-in-production";
 
 // Shared Mongo client/collection promise reused across all requests.
 const mongoClient = new MongoClient(mongoUri);
-const transactionsCollectionPromise = mongoClient
-  .connect()
-  .then(() => mongoClient.db(mongoDbName).collection(mongoCollectionName));
+const dbPromise = mongoClient.connect().then(() => mongoClient.db(mongoDbName));
+const transactionsCollectionPromise = dbPromise.then((db) => db.collection(mongoCollectionName));
+const usersCollectionPromise = dbPromise.then((db) => db.collection(usersCollectionName));
+const categoriesCollectionPromise = dbPromise.then((db) => db.collection(categoriesCollectionName));
+
+// Test-only helper used by integration tests to release the shared Mongo connection.
+async function closeDatabaseConnection() {
+  await mongoClient.close();
+}
 
 // Accepted transaction types.
 const VALID_TYPES = new Set(["income", "expense"]);
@@ -31,7 +42,7 @@ function toMonthKey(dateValue) {
 
 // Validates and normalizes incoming transaction payloads.
 function normalizeTransaction(payload) {
-  const { type, amount, category, description = "", date } = payload;
+  const { type, amount, category, categoryId, description = "", date } = payload;
 
   if (!VALID_TYPES.has(type)) {
     return { error: "type must be either 'income' or 'expense'" };
@@ -46,6 +57,10 @@ function normalizeTransaction(payload) {
     return { error: "category is required" };
   }
 
+  if (typeof categoryId === "string" && categoryId.trim().length > 0 && !ObjectId.isValid(categoryId)) {
+    return { error: "categoryId is invalid" };
+  }
+
   const txDate = date ? new Date(date) : new Date();
   if (Number.isNaN(txDate.getTime())) {
     return { error: "date must be a valid date string" };
@@ -56,8 +71,30 @@ function normalizeTransaction(payload) {
       type,
       amount: Number(numericAmount.toFixed(2)),
       category: category.trim(),
+      ...(typeof categoryId === "string" && categoryId.trim().length > 0 ? { categoryId: categoryId.trim() } : {}),
       description: typeof description === "string" ? description.trim() : "",
       date: txDate.toISOString()
+    }
+  };
+}
+
+// Validates and normalizes category payloads.
+function normalizeCategoryPayload(payload) {
+  const { name, color = "#2563eb", description = "" } = payload;
+
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return { error: "name is required" };
+  }
+
+  if (typeof color !== "string" || color.trim().length === 0) {
+    return { error: "color is required" };
+  }
+
+  return {
+    value: {
+      name: name.trim(),
+      color: color.trim(),
+      description: typeof description === "string" ? description.trim() : ""
     }
   };
 }
@@ -71,6 +108,15 @@ function parseTransactionId(idValue) {
   return { value: new ObjectId(idValue) };
 }
 
+// Validates and converts URL category ids to Mongo ObjectId.
+function parseCategoryId(idValue) {
+  if (!ObjectId.isValid(idValue)) {
+    return { error: "category id is invalid" };
+  }
+
+  return { value: new ObjectId(idValue) };
+}
+
 // Maps Mongo documents to API response shape.
 function toPublicTransaction(document) {
   return {
@@ -78,8 +124,22 @@ function toPublicTransaction(document) {
     type: document.type,
     amount: document.amount,
     category: document.category,
+    categoryId: document.categoryId ? document.categoryId.toString() : null,
     description: document.description,
     date: document.date
+  };
+}
+
+// Maps Mongo category documents to API response shape.
+function toPublicCategory(document) {
+  return {
+    id: document._id.toString(),
+    name: document.name,
+    color: document.color,
+    description: document.description ?? "",
+    ownerUserId: document.ownerUserId ? document.ownerUserId.toString() : null,
+    createdAt: document.createdAt,
+    updatedAt: document.updatedAt
   };
 }
 
@@ -135,6 +195,21 @@ function buildTransactionQuery({ type, category, month }) {
   return query;
 }
 
+// Builds a Mongo query for categories.
+function buildCategoryQuery({ name, ownerUserId }) {
+  const query = {};
+
+  if (name) {
+    query.name = { $regex: `^${String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+  }
+
+  if (ownerUserId) {
+    query.ownerUserId = ownerUserId;
+  }
+
+  return query;
+}
+
 // Wraps async route handlers with consistent 500 error responses.
 function withErrorHandling(handler) {
   return async (req, res) => {
@@ -147,6 +222,274 @@ function withErrorHandling(handler) {
   };
 }
 
+// Creates a signed JWT for a user.
+function createAuthToken(user) {
+  return jwt.sign({ userId: user._id.toString(), role: user.role }, jwtSecret, { expiresIn: "7d" });
+}
+
+// Maps Mongo user documents to API response shape.
+function toPublicUser(document) {
+  return {
+    id: document._id.toString(),
+    name: document.name,
+    email: document.email,
+    role: document.role
+  };
+}
+
+// Validates registration and login payloads.
+function normalizeAuthPayload(payload) {
+  const { name, email, password, role = "user" } = payload;
+
+  if (typeof email !== "string" || !email.includes("@")) {
+    return { error: "email must be valid" };
+  }
+
+  if (typeof password !== "string" || password.trim().length < 6) {
+    return { error: "password must be at least 6 characters" };
+  }
+
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return { error: "name is required" };
+  }
+
+  if (role !== "user" && role !== "admin") {
+    return { error: "role must be either 'user' or 'admin'" };
+  }
+
+  return {
+    value: {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      role
+    }
+  };
+}
+
+// Verifies bearer token and rejects unauthenticated writes.
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization ?? "";
+  const [scheme, token] = header.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return res.status(401).json({ error: "authorization token required" });
+  }
+
+  try {
+    req.user = jwt.verify(token, jwtSecret);
+    return next();
+  } catch {
+    return res.status(401).json({ error: "invalid or expired token" });
+  }
+}
+
+// Returns the current authenticated user id.
+function getAuthUserId(req) {
+  return req.user?.userId ?? null;
+}
+
+// Returns the current authenticated user role.
+function getAuthUserRole(req) {
+  return req.user?.role ?? null;
+}
+
+// Populates transaction category details if a categoryId exists.
+async function populateTransactionCategory(document) {
+  if (!document?.categoryId) {
+    return toPublicTransaction(document);
+  }
+
+  const categoriesCollection = await categoriesCollectionPromise;
+  const categoryId = typeof document.categoryId === "string" && ObjectId.isValid(document.categoryId)
+    ? new ObjectId(document.categoryId)
+    : document.categoryId;
+  const category = await categoriesCollection.findOne({ _id: categoryId });
+
+  return {
+    ...toPublicTransaction(document),
+    categoryDetails: category ? toPublicCategory(category) : null
+  };
+}
+
+// Category endpoints.
+app.post(
+  "/api/categories",
+  requireAuth,
+  withErrorHandling(async (req, res) => {
+    const { value, error } = normalizeCategoryPayload(req.body ?? {});
+
+    if (error) {
+      return res.status(400).json({ error });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const existingCategory = await categoriesCollection.findOne({
+      name: value.name,
+      ownerUserId: getAuthUserId(req)
+    });
+
+    if (existingCategory) {
+      return res.status(409).json({ error: "category already exists" });
+    }
+
+    const insertResult = await categoriesCollection.insertOne({
+      ...value,
+      ownerUserId: getAuthUserId(req),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const created = await categoriesCollection.findOne({ _id: insertResult.insertedId });
+    return res.status(201).json(toPublicCategory(created));
+  })
+);
+
+app.get(
+  "/api/categories",
+  withErrorHandling(async (req, res) => {
+    const { name } = req.query;
+    const categoriesCollection = await categoriesCollectionPromise;
+    const documents = await categoriesCollection
+      .find(buildCategoryQuery({ name, ownerUserId: getAuthUserId(req) }))
+      .toArray();
+
+    res.status(200).json(documents.map(toPublicCategory));
+  })
+);
+
+app.get(
+  "/api/categories/:id",
+  withErrorHandling(async (req, res) => {
+    const { value: categoryId, error: idError } = parseCategoryId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const document = await categoriesCollection.findOne({ _id: categoryId });
+    if (!document) {
+      return res.status(404).json({ error: "category not found" });
+    }
+
+    return res.status(200).json(toPublicCategory(document));
+  })
+);
+
+app.put(
+  "/api/categories/:id",
+  requireAuth,
+  withErrorHandling(async (req, res) => {
+    const { value: categoryId, error: idError } = parseCategoryId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const { value, error } = normalizeCategoryPayload(req.body ?? {});
+    if (error) {
+      return res.status(400).json({ error });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const updated = await categoriesCollection.findOneAndUpdate(
+      { _id: categoryId },
+      { $set: { ...value, updatedAt: new Date().toISOString() } },
+      { returnDocument: "after" }
+    );
+
+    const updatedDocument = updated?.value ?? updated;
+
+    if (!updatedDocument) {
+      return res.status(404).json({ error: "category not found" });
+    }
+
+    return res.status(200).json(toPublicCategory(updatedDocument));
+  })
+);
+
+app.delete(
+  "/api/categories/:id",
+  requireAuth,
+  withErrorHandling(async (req, res) => {
+    const { value: categoryId, error: idError } = parseCategoryId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const categoriesCollection = await categoriesCollectionPromise;
+    const removed = await categoriesCollection.findOneAndDelete({ _id: categoryId });
+
+    if (!removed) {
+      return res.status(404).json({ error: "category not found" });
+    }
+
+    return res.status(200).json(toPublicCategory(removed));
+  })
+);
+
+// Registration endpoint.
+app.post(
+  "/api/auth/register",
+  withErrorHandling(async (req, res) => {
+    const { value, error } = normalizeAuthPayload(req.body ?? {});
+
+    if (error) {
+      return res.status(400).json({ error });
+    }
+
+    const usersCollection = await usersCollectionPromise;
+    const existingUser = await usersCollection.findOne({ email: value.email });
+    if (existingUser) {
+      return res.status(409).json({ error: "email already exists" });
+    }
+
+    const passwordHash = await bcrypt.hash(value.password, 10);
+    const insertResult = await usersCollection.insertOne({
+      name: value.name,
+      email: value.email,
+      passwordHash,
+      role: value.role,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const user = {
+      _id: insertResult.insertedId,
+      name: value.name,
+      email: value.email,
+      role: value.role
+    };
+
+    return res.status(201).json({ token: createAuthToken(user), user: toPublicUser(user) });
+  })
+);
+
+// Login endpoint.
+app.post(
+  "/api/auth/login",
+  withErrorHandling(async (req, res) => {
+    const { email, password } = req.body ?? {};
+
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+
+    const usersCollection = await usersCollectionPromise;
+    const user = await usersCollection.findOne({ email: email.trim().toLowerCase() });
+
+    if (!user) {
+      return res.status(401).json({ error: "invalid credentials" });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "invalid credentials" });
+    }
+
+    return res.status(200).json({ token: createAuthToken(user), user: toPublicUser(user) });
+  })
+);
+
 // Lightweight health endpoint used by Docker/Kubernetes probes.
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
@@ -155,6 +498,7 @@ app.get("/health", (_req, res) => {
 // Creates a transaction document.
 app.post(
   "/api/transactions",
+  requireAuth,
   withErrorHandling(async (req, res) => {
   const { value, error } = normalizeTransaction(req.body ?? {});
 
@@ -169,6 +513,7 @@ app.post(
       type: value.type,
       amount: value.amount,
       category: value.category,
+      categoryId: value.categoryId ?? null,
       description: value.description,
       date: value.date
     });
@@ -189,9 +534,29 @@ app.get(
   })
 );
 
+app.get(
+  "/api/transactions/:id",
+  withErrorHandling(async (req, res) => {
+    const { value: transactionId, error: idError } = parseTransactionId(req.params.id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
+
+    const collection = await transactionsCollectionPromise;
+    const document = await collection.findOne({ _id: transactionId });
+
+    if (!document) {
+      return res.status(404).json({ error: "transaction not found" });
+    }
+
+    return res.status(200).json(await populateTransactionCategory(document));
+  })
+);
+
 // Updates one transaction by id.
 app.put(
   "/api/transactions/:id",
+  requireAuth,
   withErrorHandling(async (req, res) => {
     const { value: transactionId, error: idError } = parseTransactionId(req.params.id);
     if (idError) {
@@ -210,17 +575,20 @@ app.put(
       { returnDocument: "after" }
     );
 
-    if (!updated) {
+    const updatedDocument = updated?.value ?? updated;
+
+    if (!updatedDocument) {
       return res.status(404).json({ error: "transaction not found" });
     }
 
-    return res.status(200).json(toPublicTransaction(updated));
+    return res.status(200).json(toPublicTransaction(updatedDocument));
   })
 );
 
 // Deletes one transaction by id.
 app.delete(
   "/api/transactions/:id",
+  requireAuth,
   withErrorHandling(async (req, res) => {
     const { value: transactionId, error: idError } = parseTransactionId(req.params.id);
     if (idError) {
@@ -337,9 +705,38 @@ app.get(
   })
 );
 
+// Dashboard aggregates for the overview page.
+app.get(
+  "/api/dashboard",
+  withErrorHandling(async (_req, res) => {
+    const [transactionsCollection, usersCollection, categoriesCollection] = await Promise.all([
+      transactionsCollectionPromise,
+      usersCollectionPromise,
+      categoriesCollectionPromise
+    ]);
+
+    const [transactionCount, userCount, categoryCount, recentDocuments] = await Promise.all([
+      transactionsCollection.countDocuments(),
+      usersCollection.countDocuments(),
+      categoriesCollection.countDocuments(),
+      transactionsCollection.find({}).sort({ date: -1 }).limit(5).toArray()
+    ]);
+
+    res.status(200).json({
+      totals: {
+        transactions: transactionCount,
+        users: userCount,
+        categories: categoryCount
+      },
+      recentTransactions: recentDocuments.map(toPublicTransaction)
+    });
+  })
+);
+
 // Catch-all for unknown routes.
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
 });
 
 export default app;
+export { closeDatabaseConnection };
