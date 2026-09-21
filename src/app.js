@@ -21,6 +21,11 @@ const transactionsCollectionPromise = dbPromise.then((db) => db.collection(mongo
 const usersCollectionPromise = dbPromise.then((db) => db.collection(usersCollectionName));
 const categoriesCollectionPromise = dbPromise.then((db) => db.collection(categoriesCollectionName));
 
+// Allows tests and shutdown flows to release the shared Mongo connection.
+async function closeDatabaseConnection() {
+  await mongoClient.close();
+}
+
 // Accepted transaction types.
 const VALID_TYPES = new Set(["income", "expense"]);
 
@@ -734,3 +739,4 @@ app.use((req, res) => {
 });
 
 export default app;
+export { closeDatabaseConnection };

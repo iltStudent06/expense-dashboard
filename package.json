@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "seed": "node scripts/seed-transactions.js"
+    "seed": "node scripts/seed-transactions.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
@@ -17,5 +18,9 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.6.0"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.2.1",
+    "supertest": "^7.1.1"
   }
 }
