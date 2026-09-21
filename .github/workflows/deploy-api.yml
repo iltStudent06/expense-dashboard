@@ -76,6 +76,7 @@ jobs:
 
       - name: Apply manifests and update image
         run: |
+          kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/expense-api-deployment.yaml -n "${{ steps.namespace.outputs.value }}"
           kubectl apply -f k8s/expense-api-service.yaml -n "${{ steps.namespace.outputs.value }}"
           kubectl set image deployment/expense-api expense-api="${{ steps.image.outputs.image_uri }}" -n "${{ steps.namespace.outputs.value }}"

@@ -233,6 +233,28 @@
             gap: 10px;
         }
 
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .team-card {
+            background: #f9fafb;
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .team-card h3 {
+            margin: 0 0 6px;
+        }
+
+        .team-card p {
+            margin: 0;
+            color: var(--muted);
+        }
+
         .badge {
             display: inline-flex;
             align-items: center;
@@ -254,7 +276,8 @@
 
         @media (max-width: 900px) {
             .hero,
-            .features-grid {
+            .features-grid,
+            .team-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -358,12 +381,28 @@
             <p class="section-copy">The same stack powers the API, UI, and deployment workflow.</p>
             <div class="badges">
                 <span class="badge">React 18</span>
+                <span class="badge">TypeScript</span>
                 <span class="badge">Node.js</span>
                 <span class="badge">Express</span>
                 <span class="badge">MongoDB</span>
                 <span class="badge">Docker</span>
                 <span class="badge">Kubernetes</span>
                 <span class="badge">AWS EKS</span>
+            </div>
+        </section>
+
+        <section id="team" class="section section-card">
+            <h2 class="section-title">Team</h2>
+            <p class="section-copy">A collaborative full-stack capstone delivered across UI, API, testing, containers, and deployment workflows.</p>
+            <div class="team-grid">
+                <article class="team-card">
+                    <h3>ginamei</h3>
+                    <p>Full-stack contributor across React, Express, testing, and deployment assets.</p>
+                </article>
+                <article class="team-card">
+                    <h3>iltStudent10</h3>
+                    <p>Full-stack contributor across landing page polish, application features, and release workflow support.</p>
+                </article>
             </div>
         </section>
     </main>

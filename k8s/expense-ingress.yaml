@@ -2,6 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: expense-dashboard
+  namespace: expense-dashboard
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 1m
 spec:

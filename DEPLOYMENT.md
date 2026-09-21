@@ -10,6 +10,8 @@ The project currently runs in two main ways:
 	- MongoDB container
 
 2. Kubernetes manifests for the full app routing layer
+	- `Namespace`
+	- MongoDB `Deployment` + `Service` + `PersistentVolumeClaim`
 	- API `Deployment`
 	- API `Service`
 	- frontend `Deployment`
@@ -17,7 +19,7 @@ The project currently runs in two main ways:
 	- `Ingress`
 	- example `Secret`
 
-Today, the most complete path is still Docker Compose. The Kubernetes files now cover the API, frontend, and ingress path routing, but still expect an external MongoDB connection.
+Docker Compose remains the fastest local path. The Kubernetes manifests now cover the full stack, including in-cluster MongoDB, namespace setup, frontend public exposure, and optional ingress routing.
 
 ## Application routes and ports
 
@@ -149,6 +151,8 @@ cd frontend && npm test && npm run build
 
 The repository currently includes these API manifests:
 
+- [k8s/namespace.yaml](k8s/namespace.yaml)
+- [k8s/expense-mongo.yaml](k8s/expense-mongo.yaml)
 - [k8s/expense-api-deployment.yaml](k8s/expense-api-deployment.yaml)
 - [k8s/expense-api-service.yaml](k8s/expense-api-service.yaml)
 - [k8s/expense-frontend-deployment.yaml](k8s/expense-frontend-deployment.yaml)
@@ -160,11 +164,12 @@ The repository currently includes these API manifests:
 
 - deploy 2 API replicas
 - deploy 2 frontend replicas
+- deploy MongoDB inside the cluster with persistent storage
 - expose the API internally through a `ClusterIP` service
-- expose the frontend internally through a `ClusterIP` service
+- expose the frontend publicly through a `LoadBalancer` service
 - use readiness and liveness probes on `/health`
 - use frontend health checks on `/`
-- pull MongoDB settings from a Kubernetes secret
+- pull MongoDB credentials and connection settings from a Kubernetes secret
 - pull `JWT_SECRET` from a Kubernetes secret
 - use a rolling update strategy with `maxUnavailable: 0`
 - run the container as a non-root user
@@ -177,10 +182,13 @@ Create the API secret before applying the deployment:
 
 ```bash
 kubectl create secret generic expense-api-secrets \
-  --from-literal=MONGO_URI='mongodb://<username>:<password>@<mongo-host>:27017/expense_dashboard?authSource=admin' \
+	--from-literal=MONGO_ROOT_USERNAME='expense_user' \
+	--from-literal=MONGO_ROOT_PASSWORD='expense_pass' \
+	--from-literal=MONGO_URI='mongodb://expense_user:expense_pass@expense-mongo:27017/expense_dashboard?authSource=admin' \
   --from-literal=MONGO_DB='expense_dashboard' \
   --from-literal=MONGO_COLLECTION='transactions' \
-  --from-literal=JWT_SECRET='<long-random-secret>'
+	--from-literal=JWT_SECRET='<long-random-secret>' \
+	-n expense-dashboard
 ```
 
 Or copy and edit the example file first:
@@ -194,13 +202,16 @@ kubectl apply -f /tmp/expense-api-secret.yaml
 ### Apply the manifests
 
 ```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/expense-mongo.yaml
 kubectl apply -f k8s/expense-api-deployment.yaml
 kubectl apply -f k8s/expense-api-service.yaml
 kubectl apply -f k8s/expense-frontend-deployment.yaml
 kubectl apply -f k8s/expense-frontend-service.yaml
 kubectl apply -f k8s/expense-ingress.yaml
-kubectl rollout status deployment/expense-api --timeout=180s
-kubectl rollout status deployment/expense-frontend --timeout=180s
+kubectl rollout status deployment/expense-mongo -n expense-dashboard --timeout=180s
+kubectl rollout status deployment/expense-api -n expense-dashboard --timeout=180s
+kubectl rollout status deployment/expense-frontend -n expense-dashboard --timeout=180s
 ```
 
 To test the API locally from the cluster without an ingress yet:
@@ -220,10 +231,9 @@ kubectl port-forward service/expense-frontend 9000:80
 The current Kubernetes config does not yet include:
 
 - TLS setup
-- MongoDB deployment/stateful storage in cluster
 - autoscaling rules
 
-So the current k8s setup is now full-stack at the routing level, but it still depends on an external MongoDB deployment and does not yet include TLS or autoscaling.
+So the current k8s setup is full-stack and deployable, but TLS and autoscaling would still be the next production hardening steps.
 
 ## Frontend deployment plan
 

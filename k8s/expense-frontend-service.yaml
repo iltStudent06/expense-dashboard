@@ -2,10 +2,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: expense-frontend
+  namespace: expense-dashboard
   labels:
     app: expense-frontend
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: expense-frontend
   ports:

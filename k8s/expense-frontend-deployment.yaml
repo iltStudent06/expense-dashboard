@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: expense-frontend
+  namespace: expense-dashboard
   labels:
     app: expense-frontend
 spec:
