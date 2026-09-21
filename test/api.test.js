@@ -21,7 +21,7 @@ before(async () => {
   process.env.MONGO_USERS_COLLECTION = "users";
   process.env.MONGO_CATEGORIES_COLLECTION = "categories";
 
-  const apiModule = await import("../src/app.js");
+  const apiModule = await import("../src/app.ts");
   app = apiModule.default;
   closeDatabaseConnection = apiModule.closeDatabaseConnection;
 });

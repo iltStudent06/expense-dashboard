@@ -33,6 +33,18 @@ const userSchema = new Schema<IUser, UserModel, UserMethods>(
   }
 );
 
+userSchema.pre("save", async function hashPassword() {
+  if (!this.isModified("passwordHash")) {
+    return;
+  }
+
+  if (this.passwordHash.startsWith("$2")) {
+    return;
+  }
+
+  this.passwordHash = await bcrypt.hash(this.passwordHash, 10);
+});
+
 userSchema.methods.comparePassword = function comparePassword(password: string) {
   return bcrypt.compare(password, this.passwordHash);
 };
