@@ -231,7 +231,8 @@ Create secret for dev/staging:
 kubectl create secret generic expense-api-secrets \
   --from-literal=MONGO_URI='mongodb://<username>:<password>@<mongo-host>:27017/expense_dashboard?authSource=admin' \
   --from-literal=MONGO_DB='expense_dashboard' \
-  --from-literal=MONGO_COLLECTION='transactions'
+  --from-literal=MONGO_COLLECTION='transactions' \
+  --from-literal=JWT_SECRET='<long-random-secret>'
 ```
 
 Or use a local copy of the example manifest:

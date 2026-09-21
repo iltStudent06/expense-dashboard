@@ -6,6 +6,13 @@ metadata:
     app: expense-api
 spec:
   replicas: 2
+  revisionHistoryLimit: 5
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: expense-api
@@ -14,11 +21,24 @@ spec:
       labels:
         app: expense-api
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: expense-api
           image: expense-dashboard-api:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
           env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
             - name: MONGO_URI
               valueFrom:
                 secretKeyRef:
@@ -36,8 +56,14 @@ spec:
                   name: expense-api-secrets
                   key: MONGO_COLLECTION
                   optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: expense-api-secrets
+                  key: JWT_SECRET
           ports:
             - containerPort: 3000
+              name: http
           resources:
             requests:
               cpu: "100m"
