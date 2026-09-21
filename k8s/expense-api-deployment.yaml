@@ -25,7 +25,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: expense-api
-          image: expense-dashboard-api:latest
+          image: 180294218913.dkr.ecr.us-east-1.amazonaws.com/capstone-api:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
