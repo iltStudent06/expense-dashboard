@@ -169,6 +169,14 @@ h3 {
   margin-bottom: 16px;
 }
 
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
 .form {
   display: grid;
   gap: 12px;
@@ -289,6 +297,81 @@ td select {
   gap: 14px;
 }
 
+.trend-chart {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.trend-chart-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f9fafb 0%, #ffffff 100%);
+}
+
+.trend-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.trend-summary h3 {
+  margin: 0;
+}
+
+.trend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.trend-dot.income {
+  background: #10b981;
+}
+
+.trend-dot.expense {
+  background: #ef4444;
+}
+
+.trend-dot.balance {
+  background: #2563eb;
+}
+
+.trend-row {
+  display: grid;
+  gap: 8px;
+}
+
+.trend-card {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.trend-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.trend-bar-shell {
+  height: 18px;
+}
+
+.trend-select {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  font-size: 14px;
+}
+
 .breakdown-item {
   display: grid;
   gap: 8px;
@@ -323,6 +406,10 @@ td select {
   background: linear-gradient(90deg, #10b981, #22c55e);
 }
 
+.breakdown-bar.balance {
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+}
+
 @media (max-width: 768px) {
   .form,
   .grid,
@@ -332,7 +419,8 @@ td select {
   }
 
   .topbar-inner,
-  .auth-panel {
+  .auth-panel,
+  .panel-heading {
     flex-direction: column;
     align-items: flex-start;
   }

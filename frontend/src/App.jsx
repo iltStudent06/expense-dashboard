@@ -89,6 +89,18 @@ function getBreakdownEntries(group = {}) {
     .sort((a, b) => b.amount - a.amount);
 }
 
+function getTrendPresentation(metric) {
+  if (metric === "income") {
+    return { label: "Income", className: "income", accent: "#10b981" };
+  }
+
+  if (metric === "expenses") {
+    return { label: "Expenses", className: "expense", accent: "#ef4444" };
+  }
+
+  return { label: "Balance", className: "balance", accent: "#2563eb" };
+}
+
 // Shared fetch helper that applies JSON headers and normalizes API errors.
 async function request(path, options = {}) {
   const session = loadAuthSession();
@@ -355,6 +367,7 @@ function DashboardPage() {
   // Global dashboard state: filters, API data, and request/error lifecycle.
   const [month, setMonth] = useState(getCurrentMonth());
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [trendMetric, setTrendMetric] = useState("balance");
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [trends, setTrends] = useState([]);
@@ -524,6 +537,8 @@ function DashboardPage() {
     ...expenseBreakdown.map((entry) => entry.amount),
     ...incomeBreakdown.map((entry) => entry.amount)
   );
+  const trendPresentation = getTrendPresentation(trendMetric);
+  const maxTrendAmount = Math.max(1, ...trends.map((entry) => Math.abs(Number(entry[trendMetric]) || 0)));
 
   // Sorts transactions newest-first for the Recent Transactions table.
   const orderedTransactions = useMemo(
@@ -887,7 +902,53 @@ function DashboardPage() {
 
       {/* Multi-month trend breakdown for income/expenses/balance */}
       <section className="panel">
-        <h2>Trends (Last 6 Months)</h2>
+        <div className="panel-heading">
+          <div>
+            <h2>Trends (Last 6 Months)</h2>
+            <p className="muted">Switch between income, expenses, and balance to compare months.</p>
+          </div>
+
+          <label className="trend-select">
+            Trend Metric
+            <select value={trendMetric} onChange={(event) => setTrendMetric(event.target.value)}>
+              <option value="income">Income</option>
+              <option value="expenses">Expenses</option>
+              <option value="balance">Balance</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="trend-chart-panel">
+          <div className="trend-summary">
+            <span
+              className={`trend-dot ${trendPresentation.className}`}
+              aria-hidden="true"
+            />
+            <div>
+              <p className="eyebrow">Active metric</p>
+              <h3>{trendPresentation.label}</h3>
+            </div>
+          </div>
+
+          <div className="trend-chart" aria-label={`${trendPresentation.label} trend chart`}>
+          {trends.map((item) => (
+            <div key={`trend-chart-${item.month}`} className="trend-card">
+              <div className="trend-row-header">
+                <span>{item.month}</span>
+                <strong>{formatCurrency(item[trendMetric])}</strong>
+              </div>
+              <div className="breakdown-bar-shell trend-bar-shell">
+                <div
+                  className={`breakdown-bar ${trendPresentation.className}`}
+                  style={{ width: `${(Math.abs(item[trendMetric]) / maxTrendAmount) * 100}%` }}
+                />
+              </div>
+            </div>
+          ))}
+          {!trends.length ? <p className="muted">No trend data available.</p> : null}
+          </div>
+        </div>
+
         <div className="table-wrap">
           <table>
             <thead>
