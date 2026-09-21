@@ -9,12 +9,15 @@ The project currently runs in two main ways:
 	- Express API container
 	- MongoDB container
 
-2. Kubernetes manifests for the API service
+2. Kubernetes manifests for the full app routing layer
 	- API `Deployment`
 	- API `Service`
+	- frontend `Deployment`
+	- frontend `Service`
+	- `Ingress`
 	- example `Secret`
 
-Today, the most complete path is Docker Compose. The Kubernetes files are focused on the API tier and expect an external MongoDB connection.
+Today, the most complete path is still Docker Compose. The Kubernetes files now cover the API, frontend, and ingress path routing, but still expect an external MongoDB connection.
 
 ## Application routes and ports
 
@@ -148,17 +151,25 @@ The repository currently includes these API manifests:
 
 - [k8s/expense-api-deployment.yaml](k8s/expense-api-deployment.yaml)
 - [k8s/expense-api-service.yaml](k8s/expense-api-service.yaml)
+- [k8s/expense-frontend-deployment.yaml](k8s/expense-frontend-deployment.yaml)
+- [k8s/expense-frontend-service.yaml](k8s/expense-frontend-service.yaml)
+- [k8s/expense-ingress.yaml](k8s/expense-ingress.yaml)
 - [k8s/expense-api-secret.example.yaml](k8s/expense-api-secret.example.yaml)
 
 ### What the manifests currently do
 
 - deploy 2 API replicas
+- deploy 2 frontend replicas
 - expose the API internally through a `ClusterIP` service
+- expose the frontend internally through a `ClusterIP` service
 - use readiness and liveness probes on `/health`
+- use frontend health checks on `/`
 - pull MongoDB settings from a Kubernetes secret
 - pull `JWT_SECRET` from a Kubernetes secret
 - use a rolling update strategy with `maxUnavailable: 0`
 - run the container as a non-root user
+- route `/api` to the API service through ingress
+- route `/` and `/app` traffic to the frontend service through ingress
 
 ### Secret setup
 
@@ -185,7 +196,11 @@ kubectl apply -f /tmp/expense-api-secret.yaml
 ```bash
 kubectl apply -f k8s/expense-api-deployment.yaml
 kubectl apply -f k8s/expense-api-service.yaml
+kubectl apply -f k8s/expense-frontend-deployment.yaml
+kubectl apply -f k8s/expense-frontend-service.yaml
+kubectl apply -f k8s/expense-ingress.yaml
 kubectl rollout status deployment/expense-api --timeout=180s
+kubectl rollout status deployment/expense-frontend --timeout=180s
 ```
 
 To test the API locally from the cluster without an ingress yet:
@@ -194,17 +209,21 @@ To test the API locally from the cluster without an ingress yet:
 kubectl port-forward service/expense-api 3000:80
 ```
 
+To test the frontend locally from the cluster without ingress:
+
+```bash
+kubectl port-forward service/expense-frontend 9000:80
+```
+
 ### Kubernetes limitations right now
 
 The current Kubernetes config does not yet include:
 
-- frontend deployment manifests
-- ingress configuration
 - TLS setup
 - MongoDB deployment/stateful storage in cluster
 - autoscaling rules
 
-So the current k8s setup should be treated as API-focused infrastructure, not a complete full-stack cluster deployment.
+So the current k8s setup is now full-stack at the routing level, but it still depends on an external MongoDB deployment and does not yet include TLS or autoscaling.
 
 ## Frontend deployment plan
 
@@ -218,7 +237,7 @@ The frontend is currently production-ready in Docker because it is built by Vite
 
 ### Recommended Kubernetes approach for the frontend
 
-For a fuller cluster deployment, add:
+The repository now includes:
 
 1. a frontend `Deployment`
 2. a frontend `Service`
@@ -242,11 +261,11 @@ For a fuller cluster deployment, add:
 4. attach it to an internal `Service`
 5. route public traffic through `Ingress`
 
-### Suggested next Kubernetes files to add later
+### Important routing note
 
-- `k8s/expense-frontend-deployment.yaml`
-- `k8s/expense-frontend-service.yaml`
-- `k8s/expense-ingress.yaml`
+In Kubernetes, external `/api` traffic should go through ingress directly to the API service.
+
+That means the recommended access path is through the ingress hostname or load balancer, not through direct frontend service exposure for normal end-user traffic.
 
 ## Production deployment plan
 

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: expense-frontend
+  labels:
+    app: expense-frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: expense-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
