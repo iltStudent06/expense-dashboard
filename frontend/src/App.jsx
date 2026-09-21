@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 
 // Optional API prefix, useful when frontend and backend are hosted on different origins.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -109,9 +109,34 @@ function AppShell() {
           </Link>
 
           <nav className="topnav" aria-label="Primary navigation">
-            <Link to="/">Dashboard</Link>
-            <Link to="/login">Login</Link>
-            <Link to="/register">Register</Link>
+            {isAuthenticated ? (
+              <>
+                <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : undefined)}>
+                  Dashboard
+                </NavLink>
+                <NavLink
+                  to="/categories"
+                  className={({ isActive }) => (isActive ? "active" : undefined)}
+                >
+                  Categories
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink
+                  to="/login"
+                  className={({ isActive }) => (isActive ? "active" : undefined)}
+                >
+                  Login
+                </NavLink>
+                <NavLink
+                  to="/register"
+                  className={({ isActive }) => (isActive ? "active" : undefined)}
+                >
+                  Register
+                </NavLink>
+              </>
+            )}
             {isAuthenticated ? (
               <button type="button" className="topnav-button" onClick={signOut}>
                 Logout
@@ -311,6 +336,8 @@ function DashboardPage() {
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [trends, setTrends] = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -319,6 +346,7 @@ function DashboardPage() {
   const [editForm, setEditForm] = useState({
     type: "expense",
     amount: "",
+    categoryId: "",
     category: "",
     description: "",
     date: ""
@@ -328,6 +356,7 @@ function DashboardPage() {
   const [form, setForm] = useState({
     type: "expense",
     amount: "",
+    categoryId: "",
     category: "",
     description: "",
     date: new Date().toISOString().slice(0, 10)
@@ -339,15 +368,19 @@ function DashboardPage() {
     setError("");
 
     try {
-      const [txData, summaryData, trendData] = await Promise.all([
+      const [txData, summaryData, trendData, overviewData, categoryData] = await Promise.all([
         request(`/api/transactions?month=${selectedMonth}`),
         request(`/api/summary?month=${selectedMonth}`),
-        request("/api/trends?months=6")
+        request("/api/trends?months=6"),
+        request("/api/dashboard"),
+        request("/api/categories")
       ]);
 
       setTransactions(txData);
       setSummary(summaryData);
       setTrends(trendData.trends || []);
+      setOverview(overviewData);
+      setCategories(categoryData);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -370,6 +403,7 @@ function DashboardPage() {
         method: "POST",
         body: JSON.stringify({
           ...form,
+          ...(form.categoryId ? { categoryId: form.categoryId } : {}),
           amount: Number(form.amount)
         })
       });
@@ -377,6 +411,7 @@ function DashboardPage() {
       setForm((prev) => ({
         ...prev,
         amount: "",
+        categoryId: "",
         category: "",
         description: ""
       }));
@@ -388,10 +423,15 @@ function DashboardPage() {
 
   // Puts a table row into edit mode and pre-fills editable fields.
   function startEditing(item) {
+    const matchedCategory =
+      categories.find((entry) => entry.id === item.categoryId) ??
+      categories.find((entry) => entry.name.toLowerCase() === String(item.category).toLowerCase());
+
     setEditingId(item.id);
     setEditForm({
       type: item.type,
       amount: String(item.amount),
+      categoryId: matchedCategory?.id ?? item.categoryId ?? "",
       category: item.category,
       description: item.description || "",
       date: new Date(item.date).toISOString().slice(0, 10)
@@ -404,6 +444,7 @@ function DashboardPage() {
     setEditForm({
       type: "expense",
       amount: "",
+      categoryId: "",
       category: "",
       description: "",
       date: ""
@@ -419,6 +460,7 @@ function DashboardPage() {
         method: "PUT",
         body: JSON.stringify({
           ...editForm,
+          ...(editForm.categoryId ? { categoryId: editForm.categoryId } : {}),
           amount: Number(editForm.amount)
         })
       });
@@ -451,6 +493,7 @@ function DashboardPage() {
 
   // Derived totals fallback while summary is loading/unavailable.
   const totals = summary?.totals ?? { income: 0, expenses: 0, balance: 0 };
+  const appTotals = overview?.totals ?? { transactions: 0, users: 0, categories: 0 };
 
   // Sorts transactions newest-first for the Recent Transactions table.
   const orderedTransactions = useMemo(
@@ -464,8 +507,24 @@ function DashboardPage() {
         <p className="eyebrow">Dashboard</p>
         <h1>Expense Tracker / Budget Dashboard</h1>
         <p className="section-copy">
-          Track transactions, review monthly totals, and inspect trend data from the API.
+          Track transactions, review monthly totals, inspect trend data, and manage model
+          relationships with categories.
         </p>
+      </section>
+
+      <section className="grid">
+        <article className="panel">
+          <h3>Total Transactions</h3>
+          <p className="metric">{appTotals.transactions}</p>
+        </article>
+        <article className="panel">
+          <h3>Total Users</h3>
+          <p className="metric">{appTotals.users}</p>
+        </article>
+        <article className="panel">
+          <h3>Total Categories</h3>
+          <p className="metric">{appTotals.categories}</p>
+        </article>
       </section>
 
       {/* Transaction entry form */}
@@ -503,6 +562,30 @@ function DashboardPage() {
               value={form.category}
               onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}
             />
+          </label>
+
+          <label>
+            Linked Category
+            <select
+              value={form.categoryId}
+              onChange={(event) => {
+                const selectedId = event.target.value;
+                const selectedCategory = categories.find((entry) => entry.id === selectedId);
+
+                setForm((prev) => ({
+                  ...prev,
+                  categoryId: selectedId,
+                  category: selectedCategory?.name ?? prev.category
+                }));
+              }}
+            >
+              <option value="">None</option>
+              {categories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
@@ -608,13 +691,35 @@ function DashboardPage() {
                     </td>
                     <td>
                       {isEditing ? (
-                        <input
-                          type="text"
-                          value={editForm.category}
-                          onChange={(event) =>
-                            setEditForm((prev) => ({ ...prev, category: event.target.value }))
-                          }
-                        />
+                        <div className="cell-stack">
+                          <input
+                            type="text"
+                            value={editForm.category}
+                            onChange={(event) =>
+                              setEditForm((prev) => ({ ...prev, category: event.target.value }))
+                            }
+                          />
+                          <select
+                            value={editForm.categoryId}
+                            onChange={(event) => {
+                              const selectedId = event.target.value;
+                              const selectedCategory = categories.find((entry) => entry.id === selectedId);
+
+                              setEditForm((prev) => ({
+                                ...prev,
+                                categoryId: selectedId,
+                                category: selectedCategory?.name ?? prev.category
+                              }));
+                            }}
+                          >
+                            <option value="">No linked category</option>
+                            {categories.map((categoryOption) => (
+                              <option key={categoryOption.id} value={categoryOption.id}>
+                                {categoryOption.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       ) : (
                         item.category
                       )}
@@ -718,6 +823,273 @@ function DashboardPage() {
   );
 }
 
+function CategoriesPage() {
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({
+    name: "",
+    color: "#2563eb",
+    description: ""
+  });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    color: "#2563eb",
+    description: ""
+  });
+
+  async function loadCategories() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await request("/api/categories");
+      setCategories(data);
+    } catch (loadError) {
+      setError(loadError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+
+    try {
+      await request("/api/categories", {
+        method: "POST",
+        body: JSON.stringify(form)
+      });
+
+      setForm({ name: "", color: "#2563eb", description: "" });
+      await loadCategories();
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEditing(category) {
+    setEditingId(category.id);
+    setEditForm({
+      name: category.name,
+      color: category.color,
+      description: category.description || ""
+    });
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditForm({ name: "", color: "#2563eb", description: "" });
+  }
+
+  async function handleUpdate(categoryId) {
+    setSaving(true);
+    setError("");
+
+    try {
+      await request(`/api/categories/${categoryId}`, {
+        method: "PUT",
+        body: JSON.stringify(editForm)
+      });
+
+      cancelEditing();
+      await loadCategories();
+    } catch (updateError) {
+      setError(updateError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(categoryId) {
+    setSaving(true);
+    setError("");
+
+    try {
+      await request(`/api/categories/${categoryId}`, {
+        method: "DELETE"
+      });
+
+      if (editingId === categoryId) {
+        cancelEditing();
+      }
+
+      await loadCategories();
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <main className="page">
+      <section className="panel">
+        <p className="eyebrow">Categories</p>
+        <h1>Manage Categories</h1>
+        <p className="section-copy">
+          Create and maintain the second core model used to organize transactions and show
+          model relationships in the app.
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>Create Category</h2>
+        <form className="form" onSubmit={handleSubmit}>
+          <label>
+            Name
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+            />
+          </label>
+
+          <label>
+            Color
+            <input
+              type="color"
+              value={form.color}
+              onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
+            />
+          </label>
+
+          <label className="span-2">
+            Description
+            <input
+              type="text"
+              value={form.description}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, description: event.target.value }))
+              }
+            />
+          </label>
+
+          <button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save Category"}
+          </button>
+        </form>
+      </section>
+
+      {error ? <p className="error">{error}</p> : null}
+      {loading ? <p>Loading...</p> : null}
+
+      <section className="panel">
+        <h2>Category Library</h2>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Color</th>
+                <th>Description</th>
+                <th>Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((category) => {
+                const isEditing = editingId === category.id;
+
+                return (
+                  <tr key={category.id}>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editForm.name}
+                          onChange={(event) =>
+                            setEditForm((prev) => ({ ...prev, name: event.target.value }))
+                          }
+                        />
+                      ) : (
+                        category.name
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          type="color"
+                          value={editForm.color}
+                          onChange={(event) =>
+                            setEditForm((prev) => ({ ...prev, color: event.target.value }))
+                          }
+                        />
+                      ) : (
+                        <span className="color-chip-row">
+                          <span
+                            className="color-chip"
+                            style={{ backgroundColor: category.color }}
+                            aria-hidden="true"
+                          />
+                          {category.color}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editForm.description}
+                          onChange={(event) =>
+                            setEditForm((prev) => ({ ...prev, description: event.target.value }))
+                          }
+                        />
+                      ) : (
+                        category.description || "—"
+                      )}
+                    </td>
+                    <td>{new Date(category.updatedAt).toLocaleDateString()}</td>
+                    <td>
+                      <div className="actions">
+                        {isEditing ? (
+                          <>
+                            <button type="button" onClick={() => handleUpdate(category.id)}>
+                              Save
+                            </button>
+                            <button type="button" onClick={cancelEditing}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" onClick={() => startEditing(category)}>
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => handleDelete(category.id)}>
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!categories.length ? (
+                <tr>
+                  <td colSpan={5}>No categories yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -728,6 +1100,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
+              <ProtectedRoute>
+                <CategoriesPage />
               </ProtectedRoute>
             }
           />
